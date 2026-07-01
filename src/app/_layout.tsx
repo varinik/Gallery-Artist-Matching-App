@@ -1,15 +1,16 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { useFonts } from 'expo-font';
+import { Stack } from 'expo-router';
+import { View } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+export default function RootLayout() {
+  const [loaded] = useFonts({
+    Sirivennela: require('@/assets/fonts/Sirivennela-Regular.ttf'),
+    Euphoria: require('@/assets/fonts/EuphoriaScript-Regular.ttf'),
+  });
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
-  return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
-  );
+  if (!loaded) {
+    return <View />;
+  }
+
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
