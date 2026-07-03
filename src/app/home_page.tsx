@@ -1,47 +1,58 @@
-import { ImageBackground, Pressable, StyleSheet, Text } from 'react-native';
-import { useState } from 'react';
-import { View, TextInput, Button} from 'react-native';
-import { useRouter } from 'expo-router';
+import {
+  ImageBackground,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  Image,
+  Alert,
+} from "react-native";
+import { useState } from "react";
+import { useRouter } from "expo-router";
+import { supabase } from "@/lib/supabase"; // ✅ ADDED
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
 
   return (
     <ImageBackground
-      // Setting up the background
-      source={require('@/assets/images/background.png')}
+      source={require("@/assets/images/background.png")}
       style={styles.background}
-      resizeMode="contain"
+      resizeMode="cover"
     >
-    
-        <Pressable
-        onPress={() => { 
-          router.push('/new_user')
-        }}
+      <View
         style={{
-          padding: 12,
-          backgroundColor: 'black',
-          marginTop: 10,
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(255,255,255,0.4)",
         }}
-        >
-        <Text style={{ color: 'white' }}>New User? Sign Up!</Text>
-      </Pressable>
+      />
 
-      {/* Adding a back button*/}
-      <Pressable
-        onPress={() => { 
-          router.push('/')
-        }}
-        style={{
-          padding: 12,
-          backgroundColor: 'black',
-          marginTop: 10,
-        }}
+      <View style={styles.container}>
+        <Text
+          style={{
+            fontFamily: "Euphoria",
+            fontSize: 90,
+            fontWeight: "bold",
+            color: "#4d4139",
+            marginBottom: 20,
+          }}
         >
-        <Text style={{ color: 'white' }}>Back</Text>
-      </Pressable>
+          Welcome
+        </Text>
+
+        {/* BACK BUTTON */}
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Image
+            source={require("@/assets/images/arrow.png")}
+            style={{ width: 80, height: 20 }}
+          />
+        </Pressable>
+      </View>
     </ImageBackground>
   );
 }
@@ -49,27 +60,45 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   background: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  text: {
-    fontSize: 36,
-    color: 'white',
-    fontWeight: 'bold',
+
+  backButton: {
+    position: "absolute",
+    top: 40,
+    left: 10,
+    zIndex: 20,
   },
+
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 30,
-    backgroundColor: '#fff',
   },
+
   input: {
+    width: "100%",
     height: 50,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderRadius: 12,
     paddingHorizontal: 15,
     marginBottom: 15,
     fontSize: 16,
+    backgroundColor: "white",
+  },
+
+  button: {
+    padding: 12,
+    backgroundColor: "black",
+    marginTop: 10,
+    width: "100%",
+    alignItems: "center",
+    borderRadius: 10,
+  },
+
+  buttonText: {
+    color: "white",
+    fontWeight: "bold",
   },
 });

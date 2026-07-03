@@ -7,15 +7,15 @@ import {
   TextInput,
   Image,
   Alert,
-} from 'react-native';
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase'; // ✅ ADDED
+} from "react-native";
+import { useState } from "react";
+import { useRouter } from "expo-router";
+import { supabase } from "@/lib/supabase"; // ✅ ADDED
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   // ✅ ADDED LOGIN FUNCTION
   const handleLogin = async () => {
@@ -36,54 +36,34 @@ export default function LoginScreen() {
       return;
     }
 
-    // Check if this user already has a profile
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", user.id)
-      .maybeSingle();
-    
-    if (!profile) {
-      router.replace("/profile_setup"); // Change to your actual profile creation page
-      return;
-    }
-
-    // if (profileError) {
-    //   Alert.alert("Error", profileError.message);
-    //   return;
-    // }
-
-    // First-time user (no profile yet)
-    
-
     // Returning user
     router.replace("/home_page"); // Change to your actual homepage route
   };
 
   return (
     <ImageBackground
-      source={require('@/assets/images/background.png')}
+      source={require("@/assets/images/background.png")}
       style={styles.background}
       resizeMode="cover"
     >
       <View
         style={{
-          position: 'absolute',
+          position: "absolute",
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(255,255,255,0.4)',
+          backgroundColor: "rgba(255,255,255,0.4)",
         }}
       />
 
       <View style={styles.container}>
         <Text
           style={{
-            fontFamily: 'Euphoria',
+            fontFamily: "Euphoria",
             fontSize: 90,
-            fontWeight: 'bold',
-            color: '#4d4139',
+            fontWeight: "bold",
+            color: "#4d4139",
             marginBottom: 20,
           }}
         >
@@ -110,24 +90,32 @@ export default function LoginScreen() {
         {/* ✅ CHANGED: now actually logs user in */}
         <Pressable
           onPress={handleLogin}
-          style={[styles.button, { backgroundColor: '#977d6d' }]}
+          style={[styles.button, { backgroundColor: "#977d6d" }]}
         >
-          <Text style={[styles.buttonText, { color: 'white' }]}>
-            Login
-          </Text>
+          <Text style={[styles.buttonText, { color: "white" }]}>Login</Text>
         </Pressable>
 
         <Image
-          source={require('@/assets/images/seperator.png')}
+          source={require("@/assets/images/seperator.png")}
           style={{ width: 300, height: 25, marginVertical: 10 }}
         />
 
         <Pressable
-          onPress={() => router.push('/new_user')}
-          style={[styles.button, { backgroundColor: '#977d6d' }]}
+          onPress={() => router.push("/new_user")}
+          style={[styles.button, { backgroundColor: "#977d6d" }]}
         >
-          <Text style={[styles.buttonText, { color: 'white' }]}>
+          <Text style={[styles.buttonText, { color: "white" }]}>
             New User? Sign Up!
+          </Text>
+        </Pressable>
+
+        {/* TEMPORARY BUTTON */}
+        <Pressable
+          onPress={() => router.push("/artist_dashboard")}
+          style={[styles.button, { backgroundColor: "#977d6d" }]}
+        >
+          <Text style={[styles.buttonText, { color: "white" }]}>
+            ARTIST DASHBOARD
           </Text>
         </Pressable>
       </View>
@@ -142,34 +130,34 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 30,
   },
 
   input: {
-    width: '100%',
+    width: "100%",
     height: 50,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderRadius: 12,
     paddingHorizontal: 15,
     marginBottom: 15,
     fontSize: 16,
-    backgroundColor: 'white',
+    backgroundColor: "white",
   },
 
   button: {
     padding: 12,
-    backgroundColor: 'black',
+    backgroundColor: "black",
     marginTop: 10,
-    width: '100%',
-    alignItems: 'center',
+    width: "100%",
+    alignItems: "center",
     borderRadius: 10,
   },
 
   buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: "white",
+    fontWeight: "bold",
   },
 });
