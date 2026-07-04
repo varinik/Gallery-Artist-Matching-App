@@ -9,15 +9,18 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
-import * as FileSystem from "expo-file-system";
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import { decode } from "base64-arraybuffer";
+import "react-native-url-polyfill/auto";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { supabase } from "@/lib/supabase";
 
 export default function NewUserScreen() {
   const router = useRouter();
+
   // ✅ QUESTION BANK (STATIC CONFIG)
   const QUESTION_BANK = {
     artist: [
@@ -34,12 +37,16 @@ export default function NewUserScreen() {
   };
 
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+
   const DEFAULT_PROFILE_PIC =
     "https://hbclccxsfpljckxyyrtl.supabase.co/storage/v1/object/sign/profile_pic/profile_upload_7.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jNmFlNmM4OS1iMTYwLTRhMmItYTdhMy1hNTY2Y2MyYWNkZDIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwcm9maWxlX3BpYy9wcm9maWxlX3VwbG9hZF83LnBuZyIsInNjb3BlIjoiZG93bmxvYWQiLCJpYXQiOjE3ODMwMzA2ODAsImV4cCI6MTgxNDU2NjY4MH0.OytnjLGWk317f4muQk5orJdF0-WQa2DWfPz4vpWiDp8";
 
   const [profile_pic, setImage] = useState<string>(DEFAULT_PROFILE_PIC);
+
+  // 🔑 NEW: tracks whether the user actually picked a new local image,
+  // vs. still just showing the default remote URL.
+  const [hasCustomImage, setHasCustomImage] = useState(false);
+
   const [userType, setUserType] = useState<"artist" | "gallery" | null>(null);
 
   // ✅ ANSWERS STATE (DYNAMIC)
@@ -52,40 +59,83 @@ export default function NewUserScreen() {
     }));
   };
 
-  const handleCreateProfile = async () => {
-    if (!username || !password || !userType || !email) {
-      Alert.alert("Missing fields");
+  const uploadProfileImage = async (uri: string, userId: string) => {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // ALWAYS use safe extension for Expo images
+      const filePath = `avatars/${userId}.jpg`;
+
+      const { error } = await supabase.storage
+        .from("profile_pic")
+        .upload(filePath, decode(base64), {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage
+        .from("profile_pic")
+        .getPublicUrl(filePath);
+
+      console.log("UPLOAD SUCCESS:", data.publicUrl);
+
+      return data.publicUrl;
+    } catch (e) {
+      console.error("UPLOAD FAILED:", e);
+      return null;
+    }
+  };
+
+  const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Permission needed to access photos.");
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
     });
 
-    if (error) {
-      Alert.alert("Auth error", error.message);
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+      setHasCustomImage(true); // 🔑 user picked a real local photo now
+    }
+  };
+
+  const handleCreateProfile = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      Alert.alert(
+        "Not authenticated",
+        "Please verify your email and log in first.",
+      );
       return;
     }
 
-    const userId = data.user?.id;
+    const userId = session.user.id;
 
-    if (!userId) {
-      Alert.alert("User creation failed");
-      return;
-    }
-
-    // ✅ DEFAULT IMAGE (fallback)
     let profileImageUrl = DEFAULT_PROFILE_PIC;
 
-    // 🔥 UPLOAD IF USER PICKED IMAGE
-    if (profile_pic) {
+    if (hasCustomImage) {
       const uploadedUrl = await uploadProfileImage(profile_pic, userId);
+
       if (uploadedUrl) {
         profileImageUrl = uploadedUrl;
       }
     }
-    // 💾 SAVE PROFILE
+
     const { error: profileError } = await supabase.from("profiles").insert([
       {
         id: userId,
@@ -104,68 +154,6 @@ export default function NewUserScreen() {
     router.replace("/");
   };
 
-  const uploadProfileImage = async (uri: string, userId: string) => {
-    try {
-      const filePath = `avatars/${userId}.jpg`;
-
-      // Convert image to base64
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Convert base64 → Uint8Array (Supabase friendly)
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-
-      const byteArray = new Uint8Array(byteNumbers);
-
-      const { error } = await supabase.storage
-        .from("profile_pic")
-        .upload(filePath, byteArray, {
-          contentType: "image/jpeg",
-          upsert: true,
-        });
-
-      if (error) {
-        console.log("Upload error:", error.message);
-        return null;
-      }
-
-      const { data } = supabase.storage
-        .from("profile_pic")
-        .getPublicUrl(filePath);
-
-      return data.publicUrl;
-    } catch (err) {
-      console.log("Upload failed:", err);
-      return null;
-    }
-  };
-
-  const pickImage = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (!permission.granted) {
-      alert("Permission needed to access photos.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
-  };
-
   return (
     <ImageBackground
       source={require("@/assets/images/background.png")}
@@ -175,13 +163,13 @@ export default function NewUserScreen() {
       <View style={styles.overlay} />
 
       <ScrollView contentContainerStyle={styles.container}>
-        {/* BACK BUTTON */}
+        {/* BACK BUTTON
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Image
             source={require("@/assets/images/arrow.png")}
             style={{ width: 80, height: 20 }}
           />
-        </Pressable>
+        </Pressable> */}
 
         {/* TITLE */}
         <Text style={styles.title}>Create Profile</Text>
@@ -193,7 +181,7 @@ export default function NewUserScreen() {
               source={{ uri: profile_pic }}
               style={[
                 styles.profileImage,
-                profile_pic === DEFAULT_PROFILE_PIC
+                !hasCustomImage
                   ? styles.defaultImageStyle
                   : styles.userImageStyle,
               ]}
@@ -216,22 +204,6 @@ export default function NewUserScreen() {
           placeholder="Username"
           value={username}
           onChangeText={setUsername}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
         />
 
         {/* USER TYPE */}
@@ -291,17 +263,10 @@ export default function NewUserScreen() {
           </View>
         )}
 
-        <Pressable
-          style={styles.button}
-          onPress={() => console.log(username, profile_pic, userType, answers)}
-        >
+        {/* SUBMIT */}
+        <Pressable style={styles.button} onPress={handleCreateProfile}>
           <Text style={styles.buttonText}>Create Account</Text>
         </Pressable>
-
-        {/* SUBMIT */}
-        {/* <Pressable style={styles.button} onPress={handleCreateProfile}>
-          <Text style={styles.buttonText}>Create Account</Text>
-        </Pressable> */}
       </ScrollView>
     </ImageBackground>
   );

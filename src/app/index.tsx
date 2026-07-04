@@ -101,7 +101,7 @@ export default function LoginScreen() {
         />
 
         <Pressable
-          onPress={() => router.push("/new_user")}
+          onPress={() => router.push("/signup")}
           style={[styles.button, { backgroundColor: "#977d6d" }]}
         >
           <Text style={[styles.buttonText, { color: "white" }]}>
