@@ -37,7 +37,31 @@ export default function LoginScreen() {
     }
 
     // Returning user
-    router.replace("/home_page"); // Change to your actual homepage route
+    router.replace("/artist_dashboard"); // Change to your actual homepage route
+  };
+
+  const [loading, setLoading] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!email) {
+      Alert.alert("Enter your email first");
+      return;
+    }
+
+    setLoading(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: "myapp://reset-password", // change this for your app
+    });
+
+    setLoading(false);
+
+    if (error) {
+      Alert.alert("Error", error.message);
+      return;
+    }
+
+    Alert.alert("Check your email", "We sent you a password reset link.");
   };
 
   return (
@@ -116,6 +140,21 @@ export default function LoginScreen() {
         >
           <Text style={[styles.buttonText, { color: "white" }]}>
             ARTIST DASHBOARD
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={handleResetPassword}
+          style={{
+            marginTop: 10,
+            padding: 12,
+            backgroundColor: "black",
+            borderRadius: 10,
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "600" }}>
+            {loading ? "Sending..." : "Forgot Password"}
           </Text>
         </Pressable>
       </View>

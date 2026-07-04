@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 
@@ -34,15 +34,39 @@ export default function SignupScreen() {
 
     Alert.alert(
       "Check your email",
-      "We sent you a verification link. After verifying, continue setup.",
+      "We sent you a verification link. After verifying, you will continue setup.",
     );
+  };
 
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN") {
+  // ✅ THIS handles navigation AFTER real authentication exists
+  useEffect(() => {
+    // 1. Check if already logged in
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session) {
         router.replace("/new_user");
       }
-    });
-  };
+    };
+
+    checkSession();
+
+    // 2. Listen for login AFTER email verification
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "SIGNED_IN" && session) {
+          router.replace("/new_user");
+        }
+      },
+    );
+
+    // cleanup listener
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <ImageBackground
@@ -50,7 +74,6 @@ export default function SignupScreen() {
       style={styles.background}
       resizeMode="cover"
     >
-      {/* light overlay like your other screen */}
       <View style={styles.overlay} />
 
       <View style={styles.container}>
@@ -82,12 +105,12 @@ export default function SignupScreen() {
           <Text style={styles.backText}>← Back</Text>
         </Pressable>
 
-        {/* TEMPORARY BUTTON */}
+        {/* TEMP DEBUG BUTTON */}
         <Pressable
           onPress={() => router.replace("/new_user")}
           style={styles.backButton}
         >
-          <Text style={styles.backText}> NEXT </Text>
+          <Text style={styles.backText}>NEXT (DEV)</Text>
         </Pressable>
       </View>
     </ImageBackground>
@@ -95,9 +118,7 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  background: {
-    flex: 1,
-  },
+  background: { flex: 1 },
 
   overlay: {
     position: "absolute",

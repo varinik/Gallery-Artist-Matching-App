@@ -39,7 +39,7 @@ export default function NewUserScreen() {
   const [username, setUsername] = useState("");
 
   const DEFAULT_PROFILE_PIC =
-    "https://hbclccxsfpljckxyyrtl.supabase.co/storage/v1/object/sign/profile_pic/profile_upload_7.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jNmFlNmM4OS1iMTYwLTRhMmItYTdhMy1hNTY2Y2MyYWNkZDIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwcm9maWxlX3BpYy9wcm9maWxlX3VwbG9hZF83LnBuZyIsInNjb3BlIjoiZG93bmxvYWQiLCJpYXQiOjE3ODMwMzA2ODAsImV4cCI6MTgxNDU2NjY4MH0.OytnjLGWk317f4muQk5orJdF0-WQa2DWfPz4vpWiDp8";
+    "https://hbclccxsfpljckxyyrtl.supabase.co/storage/v1/object/sign/profile_pic/avatars/default.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jNmFlNmM4OS1iMTYwLTRhMmItYTdhMy1hNTY2Y2MyYWNkZDIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwcm9maWxlX3BpYy9hdmF0YXJzL2RlZmF1bHQucG5nIiwic2NvcGUiOiJkb3dubG9hZCIsImlhdCI6MTc4MzIwNzk5MywiZXhwIjoxODE0NzQzOTkzfQ.oi0m1k2rsjY1KIQ_mu54TBNUKytKfkfk4S9E73B38DQ";
 
   const [profile_pic, setImage] = useState<string>(DEFAULT_PROFILE_PIC);
 
@@ -265,7 +265,17 @@ export default function NewUserScreen() {
 
         {/* SUBMIT */}
         <Pressable style={styles.button} onPress={handleCreateProfile}>
-          <Text style={styles.buttonText}>Create Account</Text>
+          <Text style={styles.buttonText}>Finish Profile</Text>
+        </Pressable>
+
+        {/* TEMPORARY BUTTON */}
+        <Pressable
+          style={styles.button}
+          onPress={() => {
+            router.push("/artist_dashboard");
+          }}
+        >
+          <Text style={styles.buttonText}>NEXT (ARTIST DASHBOARD)</Text>
         </Pressable>
       </ScrollView>
     </ImageBackground>
