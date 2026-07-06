@@ -40,20 +40,6 @@ export default function SignupScreen() {
 
   // ✅ THIS handles navigation AFTER real authentication exists
   useEffect(() => {
-    // 1. Check if already logged in
-    const checkSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (session) {
-        router.replace("/new_user");
-      }
-    };
-
-    checkSession();
-
-    // 2. Listen for login AFTER email verification
     const { data: listener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === "SIGNED_IN" && session) {
@@ -62,7 +48,6 @@ export default function SignupScreen() {
       },
     );
 
-    // cleanup listener
     return () => {
       listener.subscription.unsubscribe();
     };

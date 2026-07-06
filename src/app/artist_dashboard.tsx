@@ -26,6 +26,16 @@ import { supabase } from "@/lib/supabase";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const TABS = ["About", "Gallery", "Blog updates"] as const;
 
+// ---- Responsive grid sizing ----
+// Adjust breakpoints/columns to taste. More columns on wider screens (tablets),
+// fewer on narrow phones.
+const GRID_SPACING = 4;
+const GRID_PADDING = 16;
+const NUM_COLUMNS = SCREEN_WIDTH >= 900 ? 4 : SCREEN_WIDTH >= 600 ? 3 : 2;
+const TILE_SIZE =
+  (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_SPACING * (NUM_COLUMNS - 1)) /
+  NUM_COLUMNS;
+
 // ---- Types --------------------------------------------------------------
 
 type Profile = {
@@ -36,9 +46,17 @@ type Profile = {
   answers: Record<string, string>;
 };
 
+type ArtworkDescription = {
+  title: string;
+  medium: string;
+  size: string;
+  description: string;
+};
+
 type GalleryImage = {
   id: string;
   image_url: string;
+  description: ArtworkDescription | null;
   created_at: string;
 };
 
@@ -51,6 +69,13 @@ type BlogPost = {
 const QUESTION_LABELS: Record<string, string> = {
   art_type: "What type of art do you create?",
   years_experience: "How many years have you been creating art?",
+};
+
+const EMPTY_ARTWORK_FORM: ArtworkDescription = {
+  title: "",
+  medium: "",
+  size: "",
+  description: "",
 };
 
 // ---- Main screen ----------------------------------------------------------
@@ -72,9 +97,27 @@ export default function ArtistDashboardScreen() {
   const [editAnswers, setEditAnswers] = useState<Record<string, string>>({});
   const [newBlogVisible, setNewBlogVisible] = useState(false);
   const [newBlogText, setNewBlogText] = useState("");
-  const [uploadingImage, setUploadingImage] = useState(false);
   const [savingAnswers, setSavingAnswers] = useState(false);
   const [postingBlog, setPostingBlog] = useState(false);
+
+  // Gallery upload flow: pick -> fill details -> upload+save
+  const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
+  const [artworkForm, setArtworkForm] =
+    useState<ArtworkDescription>(EMPTY_ARTWORK_FORM);
+  const [artworkFormVisible, setArtworkFormVisible] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Viewing a gallery item's details (tracked by index so we can navigate
+  // between posts with arrows)
+  const [viewingIndex, setViewingIndex] = useState<number | null>(null);
+  const [editingCaption, setEditingCaption] = useState(false);
+  const [editArtworkForm, setEditArtworkForm] =
+    useState<ArtworkDescription>(EMPTY_ARTWORK_FORM);
+  const [savingCaption, setSavingCaption] = useState(false);
+  const [deletingImage, setDeletingImage] = useState(false);
+
+  const viewingImage =
+    viewingIndex !== null ? galleryImages[viewingIndex] : null;
 
   useEffect(() => {
     loadEverything();
@@ -154,11 +197,9 @@ export default function ArtistDashboardScreen() {
     setEditAboutVisible(false);
   };
 
-  // ---- Gallery: upload image ----
+  // ---- Gallery: step 1, pick image ----
 
-  const pickAndUploadGalleryImage = async () => {
-    if (!userId) return;
-
+  const pickGalleryImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert("Permission needed", "Permission needed to access photos.");
@@ -171,10 +212,29 @@ export default function ArtistDashboardScreen() {
     });
     if (result.canceled) return;
 
+    // Stash the picked image and open the details form.
+    // Nothing is uploaded yet — that happens once the form is submitted.
+    setPendingImageUri(result.assets[0].uri);
+    setArtworkForm(EMPTY_ARTWORK_FORM);
+    setArtworkFormVisible(true);
+  };
+
+  // ---- Gallery: step 2, submit details -> upload + insert ----
+
+  const submitArtwork = async () => {
+    if (!userId || !pendingImageUri) return;
+
+    if (!artworkForm.title.trim()) {
+      Alert.alert(
+        "Add a title",
+        "Please give the piece a title before saving.",
+      );
+      return;
+    }
+
     setUploadingImage(true);
     try {
-      const uri = result.assets[0].uri;
-      const base64 = await FileSystem.readAsStringAsync(uri, {
+      const base64 = await FileSystem.readAsStringAsync(pendingImageUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
@@ -191,20 +251,149 @@ export default function ArtistDashboardScreen() {
       const { data: publicUrlData } = supabase.storage
         .from("gallery")
         .getPublicUrl(fileName);
-
+      console.log("uploading:", publicUrlData.publicUrl);
       const { data: inserted, error: insertError } = await supabase
         .from("gallery_images")
-        .insert([{ user_id: userId, image_url: publicUrlData.publicUrl }])
+        .insert([
+          {
+            user_id: userId,
+            image_url: publicUrlData.publicUrl,
+            description: artworkForm, // saved as jsonb: {title, medium, size, description}
+          },
+        ])
         .select()
         .single();
       if (insertError) throw insertError;
 
       setGalleryImages((prev) => [inserted as GalleryImage, ...prev]);
+      setArtworkFormVisible(false);
+      setPendingImageUri(null);
+      setArtworkForm(EMPTY_ARTWORK_FORM);
     } catch (e: any) {
+      console.log("Artwork submit error:", JSON.stringify(e, null, 2));
       Alert.alert("Upload failed", e.message ?? "Something went wrong.");
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  const cancelArtworkForm = () => {
+    setArtworkFormVisible(false);
+    setPendingImageUri(null);
+    setArtworkForm(EMPTY_ARTWORK_FORM);
+  };
+
+  // ---- Gallery: viewing / navigating between posts ----
+
+  const openViewer = (index: number) => {
+    setViewingIndex(index);
+    setEditingCaption(false);
+  };
+
+  const closeViewer = () => {
+    setViewingIndex(null);
+    setEditingCaption(false);
+  };
+
+  const goToPrevImage = () => {
+    setEditingCaption(false);
+    setViewingIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+  };
+
+  const goToNextImage = () => {
+    setEditingCaption(false);
+    setViewingIndex((prev) =>
+      prev !== null && prev < galleryImages.length - 1 ? prev + 1 : prev,
+    );
+  };
+
+  // ---- Gallery: edit caption/details for an existing post ----
+
+  const startEditingCaption = () => {
+    if (!viewingImage) return;
+    setEditArtworkForm(viewingImage.description ?? EMPTY_ARTWORK_FORM);
+    setEditingCaption(true);
+  };
+
+  const saveCaption = async () => {
+    if (!viewingImage) return;
+    setSavingCaption(true);
+    const { data, error } = await supabase
+      .from("gallery_images")
+      .update({ description: editArtworkForm })
+      .eq("id", viewingImage.id)
+      .select()
+      .single();
+    setSavingCaption(false);
+
+    if (error) {
+      Alert.alert("Couldn't save", error.message);
+      return;
+    }
+    setGalleryImages((prev) =>
+      prev.map((img) =>
+        img.id === viewingImage.id ? (data as GalleryImage) : img,
+      ),
+    );
+    setEditingCaption(false);
+  };
+
+  // ---- Gallery: delete a post ----
+
+  // Public URLs look like:
+  // https://xxx.supabase.co/storage/v1/object/public/gallery/<userId>/<file>.jpg
+  // This pulls out "<userId>/<file>.jpg" so we can delete the actual storage object.
+  const getStoragePathFromUrl = (url: string) => {
+    const marker = "/gallery/";
+    const idx = url.indexOf(marker);
+    return idx === -1 ? null : url.slice(idx + marker.length);
+  };
+
+  const deleteCurrentImage = () => {
+    if (!viewingImage) return;
+    Alert.alert(
+      "Delete this piece?",
+      "This will permanently remove the image and its details.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!viewingImage) return;
+            setDeletingImage(true);
+            try {
+              const path = getStoragePathFromUrl(viewingImage.image_url);
+              if (path) {
+                const { error: storageError } = await supabase.storage
+                  .from("gallery")
+                  .remove([path]);
+                if (storageError) throw storageError;
+              }
+
+              const { error: dbError } = await supabase
+                .from("gallery_images")
+                .delete()
+                .eq("id", viewingImage.id);
+              if (dbError) throw dbError;
+
+              setGalleryImages((prev) =>
+                prev.filter((img) => img.id !== viewingImage.id),
+              );
+              closeViewer();
+            } catch (e: any) {
+              console.log("Delete error:", JSON.stringify(e, null, 2));
+              Alert.alert(
+                "Couldn't delete",
+                e.message ?? "Something went wrong.",
+              );
+            } finally {
+              setDeletingImage(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   // ---- Blog: new post ----
@@ -301,18 +490,35 @@ export default function ArtistDashboardScreen() {
           </Pressable>
         </View>
 
-        {/* GALLERY */}
+        {/* GALLERY — responsive Instagram-style grid */}
         <View style={[styles.page, { width: SCREEN_WIDTH }]}>
           <FlatList
             data={galleryImages}
             keyExtractor={(item) => item.id}
-            numColumns={2}
-            contentContainerStyle={styles.pageContent}
-            renderItem={({ item }) => (
-              <Image
-                source={{ uri: item.image_url }}
-                style={styles.galleryImage}
-              />
+            numColumns={NUM_COLUMNS}
+            key={NUM_COLUMNS} // forces re-layout if column count ever changes
+            contentContainerStyle={{
+              padding: GRID_PADDING,
+              paddingBottom: 100,
+            }}
+            columnWrapperStyle={
+              NUM_COLUMNS > 1 ? { gap: GRID_SPACING } : undefined
+            }
+            ItemSeparatorComponent={() => (
+              <View style={{ height: GRID_SPACING }} />
+            )}
+            renderItem={({ item, index }) => (
+              <Pressable onPress={() => openViewer(index)}>
+                <Image
+                  source={{ uri: item.image_url }}
+                  style={{
+                    width: TILE_SIZE,
+                    height: TILE_SIZE,
+                    borderRadius: 6,
+                    backgroundColor: "#ddd",
+                  }}
+                />
+              </Pressable>
             )}
             ListEmptyComponent={
               <Text style={styles.emptyText}>
@@ -320,16 +526,8 @@ export default function ArtistDashboardScreen() {
               </Text>
             }
           />
-          <Pressable
-            style={styles.editFab}
-            onPress={pickAndUploadGalleryImage}
-            disabled={uploadingImage}
-          >
-            {uploadingImage ? (
-              <ActivityIndicator color="white" size="small" />
-            ) : (
-              <Ionicons name="add" size={22} color="white" />
-            )}
+          <Pressable style={styles.editFab} onPress={pickGalleryImage}>
+            <Ionicons name="add" size={22} color="white" />
           </Pressable>
         </View>
 
@@ -426,6 +624,268 @@ export default function ArtistDashboardScreen() {
                 )}
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ARTWORK DETAILS FORM (shown right after picking a photo) */}
+      <Modal visible={artworkFormVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Artwork details</Text>
+
+            {pendingImageUri && (
+              <Image
+                source={{ uri: pendingImageUri }}
+                style={styles.formPreviewImage}
+              />
+            )}
+
+            <ScrollView style={{ marginTop: 12 }}>
+              <Text style={styles.qaQuestion}>Title</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Sunset Over the Bay"
+                value={artworkForm.title}
+                onChangeText={(text) =>
+                  setArtworkForm((prev) => ({ ...prev, title: text }))
+                }
+              />
+
+              <Text style={[styles.qaQuestion, { marginTop: 14 }]}>Medium</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Oil on canvas"
+                value={artworkForm.medium}
+                onChangeText={(text) =>
+                  setArtworkForm((prev) => ({ ...prev, medium: text }))
+                }
+              />
+
+              <Text style={[styles.qaQuestion, { marginTop: 14 }]}>Size</Text>
+              <TextInput
+                style={styles.input}
+                placeholder='e.g. 24" x 36"'
+                value={artworkForm.size}
+                onChangeText={(text) =>
+                  setArtworkForm((prev) => ({ ...prev, size: text }))
+                }
+              />
+
+              <Text style={[styles.qaQuestion, { marginTop: 14 }]}>
+                Description
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  { height: 100, textAlignVertical: "top" },
+                ]}
+                placeholder="Tell people about this piece..."
+                multiline
+                value={artworkForm.description}
+                onChangeText={(text) =>
+                  setArtworkForm((prev) => ({ ...prev, description: text }))
+                }
+              />
+            </ScrollView>
+
+            <View style={styles.modalButtonRow}>
+              <Pressable
+                style={[styles.modalButton, { backgroundColor: "#ccc" }]}
+                onPress={cancelArtworkForm}
+                disabled={uploadingImage}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.modalButton}
+                onPress={submitArtwork}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.modalButtonText}>Save</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* VIEW / EDIT / DELETE ARTWORK MODAL, with prev/next navigation */}
+      <Modal
+        visible={viewingIndex !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={closeViewer}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {viewingImage && (
+              <>
+                <Pressable style={styles.closeButton} onPress={closeViewer}>
+                  <Ionicons name="close" size={22} color="#3a332c" />
+                </Pressable>
+
+                <View style={styles.viewImageWrapper}>
+                  {viewingIndex! > 0 && (
+                    <Pressable
+                      style={[styles.navArrow, styles.navArrowLeft]}
+                      onPress={goToPrevImage}
+                    >
+                      <Ionicons name="chevron-back" size={24} color="white" />
+                    </Pressable>
+                  )}
+
+                  <Image
+                    source={{ uri: viewingImage.image_url }}
+                    style={styles.viewImage}
+                    resizeMode="cover"
+                  />
+
+                  {viewingIndex! < galleryImages.length - 1 && (
+                    <Pressable
+                      style={[styles.navArrow, styles.navArrowRight]}
+                      onPress={goToNextImage}
+                    >
+                      <Ionicons
+                        name="chevron-forward"
+                        size={24}
+                        color="white"
+                      />
+                    </Pressable>
+                  )}
+                </View>
+
+                {!editingCaption ? (
+                  <ScrollView style={{ marginTop: 12 }}>
+                    <Text style={styles.viewTitle}>
+                      {viewingImage.description?.title || "Untitled"}
+                    </Text>
+                    {!!viewingImage.description?.medium && (
+                      <Text style={styles.viewMeta}>
+                        Medium: {viewingImage.description.medium}
+                      </Text>
+                    )}
+                    {!!viewingImage.description?.size && (
+                      <Text style={styles.viewMeta}>
+                        Size: {viewingImage.description.size}
+                      </Text>
+                    )}
+                    {!!viewingImage.description?.description && (
+                      <Text style={styles.viewDescription}>
+                        {viewingImage.description.description}
+                      </Text>
+                    )}
+
+                    <View style={styles.modalButtonRow}>
+                      <Pressable
+                        style={[
+                          styles.modalButton,
+                          { backgroundColor: "#ccc" },
+                        ]}
+                        onPress={startEditingCaption}
+                      >
+                        <Text style={styles.modalButtonText}>Edit</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.modalButton,
+                          { backgroundColor: "#b3453e" },
+                        ]}
+                        onPress={deleteCurrentImage}
+                        disabled={deletingImage}
+                      >
+                        {deletingImage ? (
+                          <ActivityIndicator color="white" />
+                        ) : (
+                          <Text style={styles.modalButtonText}>Delete</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  </ScrollView>
+                ) : (
+                  <ScrollView style={{ marginTop: 12 }}>
+                    <Text style={styles.qaQuestion}>Title</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editArtworkForm.title}
+                      onChangeText={(text) =>
+                        setEditArtworkForm((prev) => ({ ...prev, title: text }))
+                      }
+                    />
+
+                    <Text style={[styles.qaQuestion, { marginTop: 14 }]}>
+                      Medium
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editArtworkForm.medium}
+                      onChangeText={(text) =>
+                        setEditArtworkForm((prev) => ({
+                          ...prev,
+                          medium: text,
+                        }))
+                      }
+                    />
+
+                    <Text style={[styles.qaQuestion, { marginTop: 14 }]}>
+                      Size
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editArtworkForm.size}
+                      onChangeText={(text) =>
+                        setEditArtworkForm((prev) => ({ ...prev, size: text }))
+                      }
+                    />
+
+                    <Text style={[styles.qaQuestion, { marginTop: 14 }]}>
+                      Description
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        { height: 100, textAlignVertical: "top" },
+                      ]}
+                      multiline
+                      value={editArtworkForm.description}
+                      onChangeText={(text) =>
+                        setEditArtworkForm((prev) => ({
+                          ...prev,
+                          description: text,
+                        }))
+                      }
+                    />
+
+                    <View style={styles.modalButtonRow}>
+                      <Pressable
+                        style={[
+                          styles.modalButton,
+                          { backgroundColor: "#ccc" },
+                        ]}
+                        onPress={() => setEditingCaption(false)}
+                        disabled={savingCaption}
+                      >
+                        <Text style={styles.modalButtonText}>Cancel</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.modalButton}
+                        onPress={saveCaption}
+                        disabled={savingCaption}
+                      >
+                        {savingCaption ? (
+                          <ActivityIndicator color="white" />
+                        ) : (
+                          <Text style={styles.modalButtonText}>Save</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  </ScrollView>
+                )}
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -547,13 +1007,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#6b6258",
   },
-  galleryImage: {
-    width: (SCREEN_WIDTH - 24 * 2 - 12) / 2,
-    height: (SCREEN_WIDTH - 24 * 2 - 12) / 2,
-    borderRadius: 12,
-    margin: 6,
-    backgroundColor: "#ddd",
-  },
   blogCard: {
     backgroundColor: "white",
     borderRadius: 14,
@@ -605,7 +1058,9 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 16,
     padding: 20,
-    maxHeight: "80%",
+    maxHeight: "85%",
+    maxWidth: "90%",
+    left: 20,
   },
   modalTitle: {
     fontSize: 18,
@@ -624,7 +1079,7 @@ const styles = StyleSheet.create({
   modalButtonRow: {
     flexDirection: "row",
     marginTop: 16,
-    gap: 12,
+    gap: 15,
   },
   modalButton: {
     flex: 1,
@@ -636,5 +1091,66 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: "white",
     fontWeight: "600",
+  },
+  formPreviewImage: {
+    width: "100%",
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: "#ddd",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 10,
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 4,
+  },
+  viewImageWrapper: {
+    position: "relative",
+  },
+  viewImage: {
+    width: "100%",
+    height: 260,
+    borderRadius: 12,
+    backgroundColor: "#ddd",
+  },
+  navArrow: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -18,
+    width: 33,
+    height: 33,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+  navArrowLeft: {
+    left: -56,
+    top: 190,
+  },
+  navArrowRight: {
+    right: -56,
+    top: 190,
+  },
+  viewTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#3a332c",
+    marginBottom: 6,
+  },
+  viewMeta: {
+    fontSize: 13,
+    color: "#6b6258",
+    marginBottom: 2,
+  },
+  viewDescription: {
+    fontSize: 14,
+    color: "#3a332c",
+    marginTop: 10,
+    lineHeight: 20,
   },
 });

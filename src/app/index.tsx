@@ -37,7 +37,7 @@ export default function LoginScreen() {
     }
 
     // Returning user
-    router.replace("/artist_dashboard"); // Change to your actual homepage route
+    router.replace("/signup"); // Change to your actual homepage route
   };
 
   const [loading, setLoading] = useState(false);
