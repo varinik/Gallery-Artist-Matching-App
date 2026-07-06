@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  ImageBackground,
 } from "react-native";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
@@ -31,11 +32,6 @@ const TABS = ["About", "Gallery", "Blog updates"] as const;
 // fewer on narrow phones.
 const GRID_SPACING = 4;
 const GRID_PADDING = 16;
-const NUM_COLUMNS = SCREEN_WIDTH >= 900 ? 4 : SCREEN_WIDTH >= 600 ? 3 : 2;
-const TILE_SIZE =
-  (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_SPACING * (NUM_COLUMNS - 1)) /
-  NUM_COLUMNS;
-
 // ---- Types --------------------------------------------------------------
 
 type Profile = {
@@ -91,6 +87,13 @@ export default function ArtistDashboardScreen() {
   const [loading, setLoading] = useState(true);
 
   const [activeIndex, setActiveIndex] = useState(0);
+
+  const [contentWidth, setContentWidth] = useState(SCREEN_WIDTH);
+
+  const numColumns = contentWidth >= 900 ? 4 : contentWidth >= 600 ? 3 : 2;
+  const tileSize =
+    (contentWidth - GRID_PADDING * 2 - GRID_SPACING * (numColumns - 1)) /
+    numColumns;
 
   // Modals
   const [editAboutVisible, setEditAboutVisible] = useState(false);
@@ -165,14 +168,13 @@ export default function ArtistDashboardScreen() {
 
   const goToTab = (index: number) => {
     setActiveIndex(index);
-    scrollRef.current?.scrollTo({ x: index * SCREEN_WIDTH, animated: true });
+    scrollRef.current?.scrollTo({ x: index * contentWidth, animated: true });
   };
 
   const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    const index = Math.round(e.nativeEvent.contentOffset.x / contentWidth);
     setActiveIndex(index);
   };
-
   // ---- About: edit answers ----
 
   const openEditAbout = () => {
@@ -426,7 +428,22 @@ export default function ArtistDashboardScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <ImageBackground
+      source={require("@/assets/images/background.png")}
+      style={styles.background}
+      resizeMode="cover"
+    >
+      <View
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(255,255,255,0.4)",
+        }}
+      />
+
       {/* HEADER */}
       <View style={styles.header}>
         <Image
@@ -441,124 +458,129 @@ export default function ArtistDashboardScreen() {
         </View>
       </View>
 
-      {/* TAB SLIDER */}
-      <View style={styles.tabBar}>
-        {TABS.map((tab, i) => (
-          <Pressable
-            key={tab}
-            style={[
-              styles.tabButton,
-              activeIndex === i && styles.tabButtonActive,
-            ]}
-            onPress={() => goToTab(i)}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeIndex === i && styles.tabTextActive,
-              ]}
-            >
-              {tab}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {/* SWIPEABLE CONTENT */}
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={onScrollEnd}
-        style={{ flex: 1 }}
+      <View
+        style={styles.screen}
+        onLayout={(e) => setContentWidth(e.nativeEvent.layout.width)}
       >
-        {/* ABOUT */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
-          <ScrollView contentContainerStyle={styles.pageContent}>
-            {Object.entries(QUESTION_LABELS).map(([key, label]) => (
-              <View key={key} style={styles.qaBlock}>
-                <Text style={styles.qaQuestion}>{label}</Text>
-                <Text style={styles.qaAnswer}>
-                  {profile?.answers?.[key] || "—"}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-          <Pressable style={styles.editFab} onPress={openEditAbout}>
-            <Ionicons name="pencil" size={20} color="white" />
-          </Pressable>
+        {/* TAB SLIDER */}
+        <View style={styles.tabBar}>
+          {TABS.map((tab, i) => (
+            <Pressable
+              key={tab}
+              style={[
+                styles.tabButton,
+                activeIndex === i && styles.tabButtonActive,
+              ]}
+              onPress={() => goToTab(i)}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  activeIndex === i && styles.tabTextActive,
+                ]}
+              >
+                {tab}
+              </Text>
+            </Pressable>
+          ))}
         </View>
 
-        {/* GALLERY — responsive Instagram-style grid */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
-          <FlatList
-            data={galleryImages}
-            keyExtractor={(item) => item.id}
-            numColumns={NUM_COLUMNS}
-            key={NUM_COLUMNS} // forces re-layout if column count ever changes
-            contentContainerStyle={{
-              padding: GRID_PADDING,
-              paddingBottom: 100,
-            }}
-            columnWrapperStyle={
-              NUM_COLUMNS > 1 ? { gap: GRID_SPACING } : undefined
-            }
-            ItemSeparatorComponent={() => (
-              <View style={{ height: GRID_SPACING }} />
-            )}
-            renderItem={({ item, index }) => (
-              <Pressable onPress={() => openViewer(index)}>
-                <Image
-                  source={{ uri: item.image_url }}
-                  style={{
-                    width: TILE_SIZE,
-                    height: TILE_SIZE,
-                    borderRadius: 6,
-                    backgroundColor: "#ddd",
-                  }}
-                />
-              </Pressable>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.emptyText}>
-                No images yet — add your first one.
-              </Text>
-            }
-          />
-          <Pressable style={styles.editFab} onPress={pickGalleryImage}>
-            <Ionicons name="add" size={22} color="white" />
-          </Pressable>
-        </View>
+        {/* SWIPEABLE CONTENT */}
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={onScrollEnd}
+          style={{ flex: 1 }}
+        >
+          {/* ABOUT */}
+          <View style={[styles.page, { width: contentWidth }]}>
+            <ScrollView contentContainerStyle={styles.pageContent}>
+              {Object.entries(QUESTION_LABELS).map(([key, label]) => (
+                <View key={key} style={styles.qaBlock}>
+                  <Text style={styles.qaQuestion}>{label}</Text>
+                  <Text style={styles.qaAnswer}>
+                    {profile?.answers?.[key] || "—"}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable style={styles.editFab} onPress={openEditAbout}>
+              <Ionicons name="pencil" size={20} color="white" />
+            </Pressable>
+          </View>
 
-        {/* BLOG UPDATES */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
-          <FlatList
-            data={blogPosts}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.pageContent}
-            renderItem={({ item }) => (
-              <View style={styles.blogCard}>
-                <Text style={styles.blogText}>{item.content}</Text>
-                <Text style={styles.blogDate}>
-                  {new Date(item.created_at).toLocaleDateString()}
+          {/* GALLERY — responsive Instagram-style grid */}
+          <View style={[styles.page, { width: contentWidth }]}>
+            <FlatList
+              data={galleryImages}
+              keyExtractor={(item) => item.id}
+              numColumns={numColumns}
+              key={numColumns} // forces re-layout if column count ever changes
+              contentContainerStyle={{
+                padding: GRID_PADDING,
+                paddingBottom: 100,
+              }}
+              columnWrapperStyle={
+                numColumns > 1 ? { gap: GRID_SPACING } : undefined
+              }
+              ItemSeparatorComponent={() => (
+                <View style={{ height: GRID_SPACING }} />
+              )}
+              renderItem={({ item, index }) => (
+                <Pressable onPress={() => openViewer(index)}>
+                  <Image
+                    source={{ uri: item.image_url }}
+                    style={{
+                      width: tileSize,
+                      height: tileSize,
+                      borderRadius: 6,
+                      backgroundColor: "#ddd",
+                    }}
+                  />
+                </Pressable>
+              )}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>
+                  No images yet — add your first one.
                 </Text>
-              </View>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.emptyText}>
-                No updates yet — share something.
-              </Text>
-            }
-          />
-          <Pressable
-            style={styles.editFab}
-            onPress={() => setNewBlogVisible(true)}
-          >
-            <Ionicons name="add" size={22} color="white" />
-          </Pressable>
-        </View>
-      </ScrollView>
+              }
+            />
+            <Pressable style={styles.editFab} onPress={pickGalleryImage}>
+              <Ionicons name="add" size={22} color="white" />
+            </Pressable>
+          </View>
+
+          {/* BLOG UPDATES */}
+          <View style={[styles.page, { width: contentWidth }]}>
+            <FlatList
+              data={blogPosts}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.pageContent}
+              renderItem={({ item }) => (
+                <View style={styles.blogCard}>
+                  <Text style={styles.blogText}>{item.content}</Text>
+                  <Text style={styles.blogDate}>
+                    {new Date(item.created_at).toLocaleDateString()}
+                  </Text>
+                </View>
+              )}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>
+                  No updates yet — share something.
+                </Text>
+              }
+            />
+            <Pressable
+              style={styles.editFab}
+              onPress={() => setNewBlogVisible(true)}
+            >
+              <Ionicons name="add" size={22} color="white" />
+            </Pressable>
+          </View>
+        </ScrollView>
+      </View>
 
       {/* BOTTOM NAV */}
       <View style={styles.bottomNav}>
@@ -812,7 +834,10 @@ export default function ArtistDashboardScreen() {
                       style={styles.input}
                       value={editArtworkForm.title}
                       onChangeText={(text) =>
-                        setEditArtworkForm((prev) => ({ ...prev, title: text }))
+                        setEditArtworkForm((prev) => ({
+                          ...prev,
+                          title: text,
+                        }))
                       }
                     />
 
@@ -837,7 +862,10 @@ export default function ArtistDashboardScreen() {
                       style={styles.input}
                       value={editArtworkForm.size}
                       onChangeText={(text) =>
-                        setEditArtworkForm((prev) => ({ ...prev, size: text }))
+                        setEditArtworkForm((prev) => ({
+                          ...prev,
+                          size: text,
+                        }))
                       }
                     />
 
@@ -924,16 +952,24 @@ export default function ArtistDashboardScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ImageBackground>
   );
 }
 
 // ---- Styles ---------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  screen: {
+  background: {
     flex: 1,
+  },
+  screen: {
+    width: "96%",
+    height: "72%",
+    borderRadius: 45,
+    marginBottom: 10,
     backgroundColor: "#f5f0e6",
+    alignSelf: "center",
+    alignContent: "center",
   },
   centered: {
     flex: 1,
@@ -969,6 +1005,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#7c6f63",
     borderRadius: 24,
     padding: 4,
+    marginTop: 10,
   },
   tabButton: {
     flex: 1,
