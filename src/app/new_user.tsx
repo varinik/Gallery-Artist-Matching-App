@@ -59,6 +59,15 @@ export default function NewUserScreen() {
     }));
   };
 
+  const userTypeSelection = (type: string | null) => {
+    if (type == "artist") {
+      router.replace("/artist_dashboard");
+      return;
+    }
+    router.replace("/gallery_dashboard");
+    return;
+  };
+
   const uploadProfileImage = async (uri: string, userId: string) => {
     try {
       const base64 = await FileSystem.readAsStringAsync(uri, {
@@ -116,6 +125,11 @@ export default function NewUserScreen() {
       data: { session },
     } = await supabase.auth.getSession();
 
+    if (userType == null) {
+      Alert.alert("Missing user type selection.");
+      return;
+    }
+
     if (!session) {
       Alert.alert(
         "Not authenticated",
@@ -151,7 +165,7 @@ export default function NewUserScreen() {
       return;
     }
 
-    router.replace("/");
+    userTypeSelection(userType);
   };
 
   return (
@@ -271,9 +285,7 @@ export default function NewUserScreen() {
         {/* TEMPORARY BUTTON */}
         <Pressable
           style={styles.button}
-          onPress={() => {
-            router.push("/artist_dashboard");
-          }}
+          onPress={() => userTypeSelection(userType)}
         >
           <Text style={styles.buttonText}>NEXT (ARTIST DASHBOARD)</Text>
         </Pressable>
