@@ -309,7 +309,7 @@ export default function ArtistDashboardScreen() {
     );
   };
 
-  // ---- Gallery: edit caption/details for an existing post ----
+  // --- Gallery: edit caption/details for an existing post ----
 
   const startEditingCaption = () => {
     if (!viewingImage) return;
