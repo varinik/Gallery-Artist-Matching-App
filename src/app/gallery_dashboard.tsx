@@ -105,8 +105,6 @@ export default function GalleryDashboardScreen() {
       },
     ]);
 
-    console.log("gallery ID", galleryId);
-
     if (error) {
       console.error("Error recording swipe:", error);
       return;
