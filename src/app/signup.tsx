@@ -13,23 +13,27 @@ import { supabase } from "@/lib/supabase";
 
 export default function SignupScreen() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
+
   const [stage, setStage] = useState<"signup" | "verify">("signup");
   const [submitting, setSubmitting] = useState(false);
 
   const handleSignup = async () => {
     if (!email || !password) {
-      Alert.alert("Missing fields");
+      Alert.alert("Missing fields", "Please enter both email and password.");
       return;
     }
 
     setSubmitting(true);
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
     });
+
     setSubmitting(false);
 
     if (error) {
@@ -37,22 +41,27 @@ export default function SignupScreen() {
       return;
     }
 
-    // move to the "enter code" stage instead of just showing an alert
+    // Move to verification screen
     setStage("verify");
   };
 
   const handleVerifyCode = async () => {
     if (!code) {
-      Alert.alert("Missing code", "Please enter the code from your email.");
+      Alert.alert(
+        "Missing code",
+        "Please enter the verification code from your email.",
+      );
       return;
     }
 
     setSubmitting(true);
+
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token: code,
       type: "signup",
     });
+
     setSubmitting(false);
 
     if (error) {
@@ -61,25 +70,28 @@ export default function SignupScreen() {
     }
 
     if (data.session) {
-      // session exists now — navigate directly.
-      // onAuthStateChange in _layout.tsx will also fire SIGNED_IN,
-      // so this is just a slightly faster/more explicit path.
       router.replace("/new_user");
+    } else {
+      Alert.alert("Verified", "Your email was verified. Please sign in.");
     }
   };
 
   const handleResendCode = async () => {
+    setSubmitting(true);
+
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
     });
+
+    setSubmitting(false);
 
     if (error) {
       Alert.alert("Resend error", error.message);
       return;
     }
 
-    Alert.alert("Code resent", "Check your email for a new code.");
+    Alert.alert("Code resent", "Check your email for a new verification code.");
   };
 
   return (
@@ -120,27 +132,22 @@ export default function SignupScreen() {
               disabled={submitting}
             >
               <Text style={styles.buttonText}>
-                {submitting ? "Signing Up..." : "Sign Up"}
+                {submitting ? "Creating Account..." : "Sign Up"}
               </Text>
             </Pressable>
 
             <Pressable onPress={() => router.back()} style={styles.backButton}>
               <Text style={styles.backText}>← Back</Text>
             </Pressable>
-
-            {/* TEMP DEBUG BUTTON */}
-            <Pressable
-              onPress={() => router.replace("/new_user")}
-              style={styles.backButton}
-            >
-              <Text style={styles.backText}>NEXT (DEV)</Text>
-            </Pressable>
           </>
         ) : (
           <>
             <Text style={styles.title}>Verify Email</Text>
+
             <Text style={styles.subtitle}>
-              Enter the code we sent to {email}
+              Enter the verification code sent to:
+              {"\n"}
+              {email}
             </Text>
 
             <TextInput
@@ -171,7 +178,7 @@ export default function SignupScreen() {
               onPress={() => setStage("signup")}
               style={styles.backButton}
             >
-              <Text style={styles.backText}>← Back to sign up</Text>
+              <Text style={styles.backText}>← Back to signup</Text>
             </Pressable>
           </>
         )}
@@ -181,7 +188,9 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1 },
+  background: {
+    flex: 1,
+  },
 
   overlay: {
     position: "absolute",
