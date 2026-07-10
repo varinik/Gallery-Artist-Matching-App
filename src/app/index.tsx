@@ -8,40 +8,63 @@ import {
   Image,
   Alert,
 } from "react-native";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "expo-router";
-import { supabase } from "@/lib/supabase"; // ✅ ADDED
+import { supabase } from "@/lib/supabase";
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // ✅ ADDED LOGIN FUNCTION
+  // Automatically sign out any existing user whenever this screen opens
+  useEffect(() => {
+    const logout = async () => {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        console.log("Sign out error:", error.message);
+      } else {
+        console.log("Previous session cleared.");
+      }
+    };
+
+    logout();
+  }, []);
+
   const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert("Error", "Please enter your email and password.");
+      return;
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
 
+    console.log("LOGIN:", data);
+    console.log("ERROR:", error);
+
     if (error) {
-      Alert.alert("Login failed", error.message);
+      Alert.alert(
+        "Account Not Found",
+        "No account exists with that email and password. Please create an account first.",
+      );
       return;
     }
 
-    const user = data.user;
-
-    if (!user) {
-      Alert.alert("Error", "Unable to retrieve user.");
+    if (!data.user || !data.session) {
+      Alert.alert(
+        "Login Failed",
+        "Unable to sign in. Please create an account first.",
+      );
       return;
     }
 
-    // Returning user
-    router.replace("/artist_dashboard"); // Change to your actual homepage route
+    router.replace("/artist_dashboard");
   };
-
-  const [loading, setLoading] = useState(false);
-
   const handleResetPassword = async () => {
     if (!email) {
       Alert.alert("Enter your email first");
@@ -51,7 +74,7 @@ export default function LoginScreen() {
     setLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: "myapp://reset-password", // change this for your app
+      redirectTo: "myapp://reset-password",
     });
 
     setLoading(false);
@@ -111,7 +134,6 @@ export default function LoginScreen() {
           secureTextEntry
         />
 
-        {/* ✅ CHANGED: now actually logs user in */}
         <Pressable
           onPress={handleLogin}
           style={[styles.button, { backgroundColor: "#977d6d" }]}
