@@ -157,7 +157,7 @@ export default function LoginScreen() {
 
         {/* TEMPORARY BUTTON */}
         <Pressable
-          onPress={() => router.push("/artist_dashboard")}
+          onPress={() => router.push("/gallery_dashboard")}
           style={[styles.button, { backgroundColor: "#977d6d" }]}
         >
           <Text style={[styles.buttonText, { color: "white" }]}>

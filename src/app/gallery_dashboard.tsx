@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { getRankedArtists } from "@/lib/matchApi";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
@@ -20,6 +21,7 @@ type ArtistProfile = {
   username: string;
   profile_pic: string;
   answers: Record<string, string>;
+  compatibility?: number; // 0–100, provided by the matching backend
 };
 
 export default function GalleryDashboardScreen() {
@@ -49,7 +51,7 @@ export default function GalleryDashboardScreen() {
     const userId = session.user.id;
     setGalleryId(userId);
 
-    // ✅ get every artist this gallery has already swiped on
+    // Get every artist this gallery has already swiped on
     const { data: swiped, error: swipedError } = await supabase
       .from("swipes")
       .select("artist_id")
@@ -61,22 +63,40 @@ export default function GalleryDashboardScreen() {
       return;
     }
 
-    const swipedIds = swiped?.map((s) => s.artist_id) ?? [];
+    const swipedIds = new Set((swiped ?? []).map((s) => s.artist_id));
 
-    // ✅ fetch artists, excluding already-swiped ones
+    // Try the matching backend for ranked + scored results
+    try {
+      const ranked = await getRankedArtists(userId);
+      const filtered = ranked
+        .filter((r) => !swipedIds.has(r.artist_id))
+        .map((r) => ({
+          id: r.artist_id,
+          username: r.username,
+          profile_pic: r.profile_pic,
+          answers: r.answers,
+          compatibility: r.compatibility,
+        }));
+      setArtists(filtered);
+      setCurrentIndex(0);
+      setLoading(false);
+      return;
+    } catch (err) {
+      console.log("Matching backend unavailable, falling back to Supabase:", err);
+    }
+
+    // Fallback: direct Supabase query without compatibility scores
     let query = supabase
       .from("profiles")
       .select("id, username, profile_pic, answers")
       .eq("user_type", "artist")
       .neq("id", userId);
 
-    if (swipedIds.length > 0) {
-      query = query.not("id", "in", `(${swipedIds.join(",")})`);
+    if (swipedIds.size > 0) {
+      query = query.not("id", "in", `(${[...swipedIds].join(",")})`);
     }
 
     const { data: artistData, error: artistError } = await query;
-    console.log("artistData:", artistData);
-    console.log("artistError:", artistError);
 
     if (artistError) {
       console.error("Error fetching artists:", artistError);
@@ -257,11 +277,20 @@ export default function GalleryDashboardScreen() {
 function ArtistCard({ artist }: { artist: ArtistProfile }) {
   return (
     <>
-      <Image
-        source={{ uri: artist.profile_pic }}
-        style={styles.cardImage}
-        resizeMode="cover"
-      />
+      <View style={{ position: "relative" }}>
+        <Image
+          source={{ uri: artist.profile_pic }}
+          style={styles.cardImage}
+          resizeMode="cover"
+        />
+        {artist.compatibility !== undefined && (
+          <View style={styles.compatBadge}>
+            <Text style={styles.compatText}>
+              {Math.round(artist.compatibility)}% match
+            </Text>
+          </View>
+        )}
+      </View>
       <View style={styles.cardInfo}>
         <Text style={styles.cardName}>{artist.username}</Text>
         {artist.answers?.art_type && (
@@ -410,5 +439,21 @@ const styles = StyleSheet.create({
   refreshButtonText: {
     color: "white",
     fontWeight: "600",
+  },
+
+  compatBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "#3a332c",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+
+  compatText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });
