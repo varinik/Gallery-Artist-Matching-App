@@ -39,31 +39,48 @@ export default function LoginScreen() {
       return;
     }
 
+    setLoading(true);
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
 
-    console.log("LOGIN:", data);
-    console.log("ERROR:", error);
-
     if (error) {
+      setLoading(false);
       Alert.alert(
-        "Account Not Found",
-        "No account exists with that email and password. Please create an account first.",
+        "Login Failed",
+        "No account found with that email and password.",
       );
       return;
     }
 
     if (!data.user || !data.session) {
-      Alert.alert(
-        "Login Failed",
-        "Unable to sign in. Please create an account first.",
-      );
+      setLoading(false);
+      Alert.alert("Login Failed", "Unable to sign in. Please try again.");
       return;
     }
 
-    router.replace("/artist_dashboard");
+    // Fetch user_type from profiles to route correctly
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("user_type")
+      .eq("id", data.user.id)
+      .single();
+
+    setLoading(false);
+
+    if (!profile) {
+      // Account exists but profile setup not finished
+      router.replace("/new_user");
+      return;
+    }
+
+    if (profile.user_type === "gallery") {
+      router.replace("/gallery_dashboard");
+    } else {
+      router.replace("/artist_dashboard");
+    }
   };
   const handleResetPassword = async () => {
     if (!email) {
@@ -136,9 +153,12 @@ export default function LoginScreen() {
 
         <Pressable
           onPress={handleLogin}
-          style={[styles.button, { backgroundColor: "#977d6d" }]}
+          disabled={loading}
+          style={[styles.button, { backgroundColor: "#977d6d", opacity: loading ? 0.6 : 1 }]}
         >
-          <Text style={[styles.buttonText, { color: "white" }]}>Login</Text>
+          <Text style={[styles.buttonText, { color: "white" }]}>
+            {loading ? "Signing in…" : "Login"}
+          </Text>
         </Pressable>
 
         <Image
@@ -152,16 +172,6 @@ export default function LoginScreen() {
         >
           <Text style={[styles.buttonText, { color: "white" }]}>
             New User? Sign Up!
-          </Text>
-        </Pressable>
-
-        {/* TEMPORARY BUTTON */}
-        <Pressable
-          onPress={() => router.push("/gallery_dashboard")}
-          style={[styles.button, { backgroundColor: "#977d6d" }]}
-        >
-          <Text style={[styles.buttonText, { color: "white" }]}>
-            ARTIST DASHBOARD
           </Text>
         </Pressable>
 

@@ -31,8 +31,8 @@ export default function NewUserScreen() {
       },
     ],
     gallery: [
-      { key: "gallery_name", label: "What is your gallery name?" },
-      { key: "location", label: "Where is your gallery located?" },
+      { key: "artist_type", label: "What type of artist are you looking for?" },
+      { key: "art_style", label: "What style of art are you interested in?" },
     ],
   };
 
