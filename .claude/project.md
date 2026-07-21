@@ -8,16 +8,16 @@ A mobile app (Expo / React Native) that connects **artists** with **art gallerie
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Mobile app | Expo (SDK 56) + React Native, TypeScript, expo-router |
-| Styling | NativeWind / Tailwind-style, custom theme in `src/constants/theme.ts` |
-| Auth & DB | Supabase (auth, PostgreSQL, storage) |
-| Vector search | pgvector extension on Supabase PostgreSQL |
-| Matching backend | Python 3.10+, FastAPI, uvicorn |
-| Text description | Gemma 3 4B (`google/gemma-3-4b-it`) via HuggingFace transformers |
-| Text embedding | BAAI/bge-large-en-v1.5 (1024-d, via sentence-transformers) |
-| Image/style embedding | OpenCLIP ViT-B-32 (512-d, via open-clip-torch) |
+| Layer                 | Technology                                                            |
+| --------------------- | --------------------------------------------------------------------- |
+| Mobile app            | Expo (SDK 56) + React Native, TypeScript, expo-router                 |
+| Styling               | NativeWind / Tailwind-style, custom theme in `src/constants/theme.ts` |
+| Auth & DB             | Supabase (auth, PostgreSQL, storage)                                  |
+| Vector search         | pgvector extension on Supabase PostgreSQL                             |
+| Matching backend      | Python 3.10+, FastAPI, uvicorn                                        |
+| Text description      | Gemma 3 4B (`google/gemma-3-4b-it`) via HuggingFace transformers      |
+| Text embedding        | BAAI/bge-large-en-v1.5 (1024-d, via sentence-transformers)            |
+| Image/style embedding | OpenCLIP ViT-B-32 (512-d, via open-clip-torch)                        |
 
 ---
 
@@ -85,6 +85,7 @@ src/
 ## Routing & Access Control
 
 Login (`index.tsx`) fetches `user_type` from the `profiles` table after auth and routes:
+
 - `gallery` → `/gallery_dashboard`
 - `artist` → `/artist_dashboard`
 - no profile → `/new_user`
@@ -98,6 +99,7 @@ Galleries can navigate between `gallery_dashboard` ↔ `gallery_profile` via the
 ### How It Works
 
 #### Artist embedding pipeline
+
 1. Fetch `answers` (art_type, years_experience) + all artwork image URLs from `gallery_images`
 2. Gemma 3 synthesizes a 2–3 sentence description from the structured fields
 3. BAAI/bge-large-en-v1.5 encodes the description → **1024-d text vector**
@@ -105,6 +107,7 @@ Galleries can navigate between `gallery_dashboard` ↔ `gallery_profile` via the
 5. Both vectors upserted into `artist_embeddings`
 
 #### Gallery embedding pipeline
+
 1. Fetch `answers` (artist_type, art_style)
 2. Gemma 3 synthesizes a 2–3 sentence description of the gallery's art preferences
 3. BAAI/bge-large-en-v1.5 encodes the description → **1024-d text vector**
