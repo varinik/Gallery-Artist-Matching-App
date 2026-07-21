@@ -29,29 +29,27 @@ A mobile app (Expo / React Native) that connects **artists** with **art gallerie
 
 ### Database Tables
 
-| Table                | Purpose                                                                                                                                       |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`           | One row per user. Columns: `id` (uuid), `username`, `user_type` (`artist` or `gallery`), `profile_pic` (URL), `answers` (jsonb)               |
-| `gallery_images`     | Artwork uploaded by artists. Columns: `id`, `user_id`, `image_url`, `description` (jsonb: `{title, medium, size, description}`), `created_at` |
-| `blog_posts`         | Artist blog updates. Columns: `id`, `user_id`, `content`, `created_at`                                                                        |
-| `swipes`             | Gallery swipe history. Columns: `gallery_id`, `artist_id`, `decision` (`liked` or `passed`)                                                   |
-| `artist_embeddings`  | AI vectors for artists. Columns: `user_id`, `text_embedding` (vector 1024), `image_embedding` (vector 512), `updated_at`                      |
-| `gallery_embeddings` | AI vectors for galleries. Same structure — but `image_embedding` stores a CLIP **text** vector (see matching section)                         |
+| Table | Purpose |
+|-------|---------|
+| `profiles` | One row per user. Columns: `id` (uuid), `username`, `user_type` (`artist` or `gallery`), `profile_pic` (URL), `answers` (jsonb) |
+| `gallery_images` | Artwork uploaded by artists. Columns: `id`, `user_id`, `image_url`, `description` (jsonb: `{title, medium, size, description}`), `created_at` |
+| `blog_posts` | Artist blog updates. Columns: `id`, `user_id`, `content`, `created_at` |
+| `swipes` | Gallery swipe history. Columns: `gallery_id`, `artist_id`, `decision` (`liked` or `passed`) |
+| `artist_embeddings` | AI vectors for artists. Columns: `user_id`, `text_embedding` (vector 1024), `image_embedding` (vector 512), `updated_at` |
+| `gallery_embeddings` | AI vectors for galleries. Same structure — but `image_embedding` stores a CLIP **text** vector (see matching section) |
 
 ### Supabase Storage Buckets
 
-| Bucket        | Contents                                          |
-| ------------- | ------------------------------------------------- |
-| `profile_pic` | Profile photos — path: `avatars/{userId}.jpg`     |
-| `gallery`     | Artwork images — path: `{userId}/{timestamp}.jpg` |
+| Bucket | Contents |
+|--------|---------|
+| `profile_pic` | Profile photos — path: `avatars/{userId}.jpg` |
+| `gallery` | Artwork images — path: `{userId}/{timestamp}.jpg` |
 
 ### Artist Profile Questions (`answers` jsonb keys)
-
 - `art_type` — "What type of art do you create?"
 - `years_experience` — "How many years have you been creating art?"
 
 ### Gallery Profile Questions (`answers` jsonb keys)
-
 - `artist_type` — "What type of artist are you looking for?"
 - `art_style` — "What style of art are you interested in?"
 
@@ -133,14 +131,14 @@ If an artist has no artwork images uploaded, `style_sim` is skipped and the scor
 
 ### API Endpoints
 
-| Method | Path                                      | Description                    |
-| ------ | ----------------------------------------- | ------------------------------ |
-| `GET`  | `/health`                                 | Confirm all models are loaded  |
-| `POST` | `/embed/artist/{user_id}`                 | Embed (or refresh) one artist  |
-| `POST` | `/embed/gallery/{user_id}`                | Embed (or refresh) one gallery |
-| `POST` | `/embed/all`                              | Batch-embed every profile      |
-| `GET`  | `/compatibility/{gallery_id}/{artist_id}` | Point-in-time score            |
-| `GET`  | `/ranked_artists/{gallery_id}`            | All artists sorted by match %  |
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/health` | Confirm all models are loaded |
+| `POST` | `/embed/artist/{user_id}` | Embed (or refresh) one artist |
+| `POST` | `/embed/gallery/{user_id}` | Embed (or refresh) one gallery |
+| `POST` | `/embed/all` | Batch-embed every profile |
+| `GET`  | `/compatibility/{gallery_id}/{artist_id}` | Point-in-time score |
+| `GET`  | `/ranked_artists/{gallery_id}` | All artists sorted by match % |
 
 ### Running the Backend
 
@@ -155,12 +153,12 @@ uvicorn matcher:app --reload   # first run downloads Gemma 3 (~8 GB)
 
 ### Backend Environment Variables (`backend/.env`)
 
-| Variable               | What it is                                                                                                                                                                                                  |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SUPABASE_URL`         | `https://hbclccxsfpljckxyyrtl.supabase.co` (no trailing slash, no `/rest/v1/`)                                                                                                                              |
-| `SUPABASE_SERVICE_KEY` | Service-role key from Supabase Dashboard → Settings → API                                                                                                                                                   |
-| `DATABASE_URL`         | Postgres URI — use the **Session mode pooler** (port 5432) from Supabase Dashboard → Settings → Database → Connection string. Transaction pooler (port 6543) does not work with pgvector's register_vector. |
-| `HUGGINGFACE_TOKEN`    | HF read token; must accept Gemma 3 terms at hf.co/google/gemma-3-4b-it                                                                                                                                      |
+| Variable | What it is |
+|----------|-----------|
+| `SUPABASE_URL` | `https://hbclccxsfpljckxyyrtl.supabase.co` (no trailing slash, no `/rest/v1/`) |
+| `SUPABASE_SERVICE_KEY` | Service-role key from Supabase Dashboard → Settings → API |
+| `DATABASE_URL` | Postgres URI — use the **Session mode pooler** (port 5432) from Supabase Dashboard → Settings → Database → Connection string. Transaction pooler (port 6543) does not work with pgvector's register_vector. |
+| `HUGGINGFACE_TOKEN` | HF read token; must accept Gemma 3 terms at hf.co/google/gemma-3-4b-it |
 
 ### pgvector Schema
 

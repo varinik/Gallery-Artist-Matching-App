@@ -145,6 +145,15 @@ def _upsert_embedding(table: str, user_id: str, text_emb: np.ndarray, image_emb:
         conn.close()
 
 
+def _vec(v) -> Optional[np.ndarray]:
+    """Convert pgvector Vector object or any iterable to a float32 numpy array."""
+    if v is None:
+        return None
+    if isinstance(v, np.ndarray):
+        return v.astype(np.float32)
+    return np.array(v.to_list(), dtype=np.float32)
+
+
 def _fetch_embedding(table: str, user_id: str) -> Optional[dict]:
     conn = _db()
     try:
@@ -156,7 +165,7 @@ def _fetch_embedding(table: str, user_id: str) -> Optional[dict]:
             row = cur.fetchone()
         if row is None:
             return None
-        return {"text": np.array(row[0], dtype=np.float32), "image": np.array(row[1], dtype=np.float32)}
+        return {"text": _vec(row[0]), "image": _vec(row[1])}
     finally:
         conn.close()
 
@@ -177,10 +186,7 @@ def _fetch_all_artist_embeddings(artist_ids: list[str]) -> dict[str, dict]:
             )
             rows = cur.fetchall()
         return {
-            row[0]: {
-                "text": np.array(row[1], dtype=np.float32),
-                "image": np.array(row[2], dtype=np.float32),
-            }
+            row[0]: {"text": _vec(row[1]), "image": _vec(row[2])}
             for row in rows
         }
     finally:
@@ -206,19 +212,29 @@ async def _fetch_pil(url: str) -> Optional[Image.Image]:
 
 
 def _embed_pil(img: Image.Image) -> np.ndarray:
-    tensor = _clip_preprocess(img).unsqueeze(0).to(_clip_device)
+    tensor = _clip_preprocess(img).unsqueeze(0).to(_device)
     with torch.no_grad():
         feat = _clip_model.encode_image(tensor)
         feat = feat / feat.norm(dim=-1, keepdim=True)
     return feat.cpu().squeeze().numpy().astype(np.float32)
 
 
-async def embed_images(urls: list[str]) -> np.ndarray:
-    """Download all URLs, embed each with OpenCLIP, return mean-normalised vector."""
+def embed_text_clip(text: str) -> np.ndarray:
+    """Encode text with OpenCLIP's text encoder → 512-d vector in CLIP embedding space."""
+    tokens = open_clip.tokenize([text]).to(_device)
+    with torch.no_grad():
+        feat = _clip_model.encode_text(tokens)
+        feat = feat / feat.norm(dim=-1, keepdim=True)
+    return feat.cpu().squeeze().numpy().astype(np.float32)
+
+
+async def embed_images(urls: list[str]) -> Optional[np.ndarray]:
+    """Download all URLs, embed each with OpenCLIP, return mean-normalised vector.
+    Returns None when no images are available."""
     pils = await asyncio.gather(*[_fetch_pil(u) for u in urls if u])
     valid = [p for p in pils if p is not None]
     if not valid:
-        return np.zeros(IMAGE_DIM, dtype=np.float32)
+        return None
     vecs = [_embed_pil(p) for p in valid]
     mean = np.mean(vecs, axis=0)
     norm = np.linalg.norm(mean)
@@ -268,20 +284,19 @@ and the kind of gallery context that would suit them. Be specific and factual �
 
 def synthesize_gallery_description(profile: dict) -> str:
     answers = profile.get("answers") or {}
-    gallery_name = answers.get("gallery_name") or profile.get("username") or "Unknown Gallery"
-    location = answers.get("location") or "Location not specified"
+    artist_type = answers.get("artist_type") or "Not specified"
+    art_style = answers.get("art_style") or "Not specified"
 
     return _gemma3(
         f"""You are generating a concise gallery profile summary for semantic vector embedding.
 This summary will be used to match the gallery with suitable artists.
 
-Gallery data:
-- Gallery name: {gallery_name}
-- Location: {location}
+Gallery preferences:
+- Type of artist they are looking for: {artist_type}
+- Style of art they are interested in: {art_style}
 
-Write exactly 2–3 sentences that capture: the gallery's likely artistic identity, the types of \
-artists or mediums it would typically represent, and the cultural or geographic context of its \
-location. Be specific and factual — no marketing language."""
+Write exactly 2–3 sentences that capture: the specific type of artist this gallery wants to work \
+with and the visual style or aesthetic they are seeking. Be specific and factual — no marketing language."""
     )
 
 # ---------------------------------------------------------------------------
@@ -311,11 +326,8 @@ async def compute_artist_embedding(user_id: str) -> dict:
     # Step 2: BAAI text embedding
     text_emb = embed_text(description)
 
-    # Step 3: OpenCLIP image embedding (profile pic + all artwork images)
-    image_urls = []
-    if profile.get("profile_pic"):
-        image_urls.append(profile["profile_pic"])
-    image_urls += [row["image_url"] for row in gallery_rows if row.get("image_url")]
+    # Step 3: OpenCLIP image embedding (artwork only — profile pic excluded)
+    image_urls = [row["image_url"] for row in gallery_rows if row.get("image_url")]
     image_emb = await embed_images(image_urls)
 
     # Step 4: pgvector upsert
@@ -337,9 +349,10 @@ async def compute_gallery_embedding(user_id: str) -> dict:
     # Step 2: BAAI text embedding
     text_emb = embed_text(description)
 
-    # Step 3: OpenCLIP image embedding (profile pic only for galleries)
-    image_urls = [profile["profile_pic"]] if profile.get("profile_pic") else []
-    image_emb = await embed_images(image_urls)
+    # Step 3: CLIP text embedding of the gallery's style description.
+    # Stored in the image_embedding slot so it can be compared cross-modally
+    # with the artist's CLIP image embedding (both live in the same 512-d CLIP space).
+    image_emb = embed_text_clip(description)
 
     # Step 4: pgvector upsert
     _upsert_embedding("gallery_embeddings", user_id, text_emb, image_emb)
@@ -357,10 +370,16 @@ def _cosine(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def compatibility_score(gallery_emb: dict, artist_emb: dict) -> float:
-    """Return a 0–100 compatibility percentage."""
-    text_sim  = _cosine(gallery_emb["text"],  artist_emb["text"])
-    image_sim = _cosine(gallery_emb["image"], artist_emb["image"])
-    raw = TEXT_WEIGHT * text_sim + IMAGE_WEIGHT * image_sim
+    """Return a 0–100 compatibility percentage.
+    Falls back to text-only scoring when either side has no image embedding."""
+    text_sim = _cosine(gallery_emb["text"], artist_emb["text"])
+    g_img = gallery_emb.get("image")
+    a_img = artist_emb.get("image")
+    if g_img is not None and a_img is not None:
+        image_sim = _cosine(g_img, a_img)
+        raw = TEXT_WEIGHT * text_sim + IMAGE_WEIGHT * image_sim
+    else:
+        raw = text_sim
     return round(min(100.0, max(0.0, (raw + 1.0) / 2.0 * 100.0)), 1)
 
 # ---------------------------------------------------------------------------
