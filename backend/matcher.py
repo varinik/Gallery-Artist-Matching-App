@@ -271,32 +271,39 @@ This summary will be used to match the artist with suitable art galleries.
 
 Artist data:
 - Username: {profile.get("username", "Unknown")}
-- Art type: {answers.get("art_type", "Not specified")}
+- Location: {answers.get("location", "Not specified")}
+- Medium(s): {answers.get("medium", "Not specified")}
+- Art style: {answers.get("art_type", "Not specified")}
 - Years of experience: {answers.get("years_experience", "Not specified")}
+- Reason for creating art: {answers.get("reason", "Not specified")}
+- Goals: {answers.get("goals", "Not specified")}
 
 Portfolio artworks:
 {artwork_lines}
 
 Write exactly 2–3 sentences that capture: the artist's medium and style, their experience level, \
-and the kind of gallery context that would suit them. Be specific and factual — no marketing language."""
+their location, and the artistic intent and goals behind their work. Be specific and factual — no marketing language."""
     )
 
 
 def synthesize_gallery_description(profile: dict) -> str:
     answers = profile.get("answers") or {}
     artist_type = answers.get("artist_type") or "Not specified"
-    art_style = answers.get("art_style") or "Not specified"
+    experience = answers.get("experience") or "Not specified"
+    artist_goals = answers.get("artist_goals") or "Not specified"
 
     return _gemma3(
         f"""You are generating a concise gallery profile summary for semantic vector embedding.
 This summary will be used to match the gallery with suitable artists.
 
 Gallery preferences:
-- Type of artist they are looking for: {artist_type}
-- Style of art they are interested in: {art_style}
+- Mediums or styles they are interested in displaying: {artist_type}
+- Experience level they are looking for: {experience}
+- Characteristics they look for in an artist: {artist_goals}
 
-Write exactly 2–3 sentences that capture: the specific type of artist this gallery wants to work \
-with and the visual style or aesthetic they are seeking. Be specific and factual — no marketing language."""
+Write exactly 2–3 sentences that capture: the specific type/style of artist this gallery wants to work \
+with, the experience level they expect, and the characteristics or qualities they value in an artist. \
+Be specific and factual — no marketing language."""
     )
 
 # ---------------------------------------------------------------------------

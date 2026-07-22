@@ -24,15 +24,41 @@ export default function NewUserScreen() {
   // ✅ QUESTION BANK (STATIC CONFIG)
   const QUESTION_BANK = {
     artist: [
-      { key: "art_type", label: "What type of art do you create?" },
+      { key: "location", label: "Where are you located?" },
+      { key: "medium", label: "What medium(s) do you use?" },
       {
         key: "years_experience",
-        label: "How many years have you been creating art?",
+        label: "How experienced are you in creating art?",
+      },
+      {
+        key: "art_type",
+        label: "What style of art do you gravitate towards creating?",
+      },
+      {
+        key: "reason",
+        label:
+          "Why do you create art and what message do you want to send viewers with your pieces?",
+      },
+      {
+        key: "goals",
+        label: "What are you short and long term goals for your art?",
       },
     ],
     gallery: [
-      { key: "artist_type", label: "What type of artist are you looking for?" },
-      { key: "art_style", label: "What style of art are you interested in?" },
+      {
+        key: "artist_type",
+        label: "What mediums or styles are interested in displaying?",
+      },
+      {
+        key: "experience",
+        label: "What experience level are you looking for?",
+      },
+      {
+        key: "artist_goals",
+        label:
+          "What characteristics do you look for in an artist you are willing to display (ie. goals, passion, etc)?",
+      },
+      { key: "location", label: "Where is you gallery located?" },
     ],
   };
 

@@ -27,8 +27,10 @@ type Profile = {
 };
 
 const QUESTION_LABELS: Record<string, string> = {
-  artist_type: "Type of artist you're looking for",
-  art_style: "Style of art you're interested in",
+  artist_type: "What mediums or styles are interested in displaying?",
+  experience: "What experience level are you looking for?",
+  artist_goals:
+    "What characteristics do you look for in an artist you are willing to display (ie. goals, passion, etc)?",
 };
 
 export default function GalleryProfileScreen() {

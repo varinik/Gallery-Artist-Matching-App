@@ -63,8 +63,13 @@ type BlogPost = {
 };
 
 const QUESTION_LABELS: Record<string, string> = {
-  art_type: "What type of art do you create?",
-  years_experience: "How many years have you been creating art?",
+  location: "Where are you located?",
+  medium: "What medium(s) do you use?",
+  years_experience: "How experienced are you in creating art?",
+  art_type: "What style of art do you gravitate towards creating?",
+  reason:
+    "Why do you create art and what message do you want to send viewers with your pieces?",
+  goals: "What are you short and long term goals for your art?",
 };
 
 const EMPTY_ARTWORK_FORM: ArtworkDescription = {

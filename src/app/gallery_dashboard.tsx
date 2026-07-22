@@ -10,6 +10,9 @@ import {
   Pressable,
   Modal,
   ScrollView,
+  FlatList,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
   ActivityIndicator,
 } from "react-native";
 import { useState, useRef, useEffect } from "react";
@@ -21,6 +24,10 @@ import { getRankedArtists } from "@/lib/matchApi";
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
 
+const PROFILE_TABS = ["About", "Gallery", "Blog updates"] as const;
+const GRID_SPACING = 4;
+const GRID_PADDING = 16;
+
 type ArtistProfile = {
   id: string;
   username: string;
@@ -29,10 +36,33 @@ type ArtistProfile = {
   compatibility?: number;
 };
 
+type ArtworkDescription = {
+  title: string;
+  medium: string;
+  size: string;
+  description: string;
+};
+
 type GalleryImage = {
   id: string;
   image_url: string;
-  description?: { title?: string; medium?: string };
+  description: ArtworkDescription | null;
+};
+
+type BlogPost = {
+  id: string;
+  content: string;
+  created_at: string;
+};
+
+const QUESTION_LABELS: Record<string, string> = {
+  location: "Where are you located?",
+  medium: "What medium(s) do you use?",
+  years_experience: "How experienced are you in creating art?",
+  art_type: "What style of art do you gravitate towards creating?",
+  reason:
+    "Why do you create art and what message do you want to send viewers with your pieces?",
+  goals: "What are you short and long term goals for your art?",
 };
 
 export default function GalleryDashboardScreen() {
@@ -46,7 +76,19 @@ export default function GalleryDashboardScreen() {
   const [profileModal, setProfileModal] = useState(false);
   const [modalArtist, setModalArtist] = useState<ArtistProfile | null>(null);
   const [modalImages, setModalImages] = useState<GalleryImage[]>([]);
+  const [modalBlogPosts, setModalBlogPosts] = useState<BlogPost[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
+  const [viewingArtIndex, setViewingArtIndex] = useState<number | null>(null);
+
+  const [activeProfileTab, setActiveProfileTab] = useState(0);
+  const [profileContentWidth, setProfileContentWidth] = useState(SCREEN_WIDTH);
+  const profileScrollRef = useRef<ScrollView>(null);
+
+  const profileNumColumns =
+    profileContentWidth >= 900 ? 4 : profileContentWidth >= 600 ? 3 : 2;
+  const profileTileSize =
+    (profileContentWidth - GRID_PADDING * 2 - GRID_SPACING * (profileNumColumns - 1)) /
+    profileNumColumns;
 
   const position = useRef(new Animated.ValueXY()).current;
 
@@ -100,7 +142,10 @@ export default function GalleryDashboardScreen() {
       setLoading(false);
       return;
     } catch (err) {
-      console.log("Matching backend unavailable, falling back to Supabase:", err);
+      console.log(
+        "Matching backend unavailable, falling back to Supabase:",
+        err,
+      );
     }
 
     // Fallback: direct Supabase query without compatibility scores
@@ -204,15 +249,60 @@ export default function GalleryDashboardScreen() {
   const openArtistProfile = async (artist: ArtistProfile) => {
     setModalArtist(artist);
     setProfileModal(true);
+    setActiveProfileTab(0);
+    setViewingArtIndex(null);
     setLoadingImages(true);
-    const { data } = await supabase
-      .from("gallery_images")
-      .select("id, image_url, description")
-      .eq("user_id", artist.id)
-      .order("created_at", { ascending: false })
-      .limit(12);
-    setModalImages(data ?? []);
+    const [{ data: imagesData }, { data: postsData }] = await Promise.all([
+      supabase
+        .from("gallery_images")
+        .select("id, image_url, description")
+        .eq("user_id", artist.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("blog_posts")
+        .select("id, content, created_at")
+        .eq("user_id", artist.id)
+        .order("created_at", { ascending: false }),
+    ]);
+    setModalImages(imagesData ?? []);
+    setModalBlogPosts(postsData ?? []);
     setLoadingImages(false);
+  };
+
+  const goToProfileTab = (index: number) => {
+    setActiveProfileTab(index);
+    profileScrollRef.current?.scrollTo({
+      x: index * profileContentWidth,
+      animated: true,
+    });
+  };
+
+  const onProfileScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(
+      e.nativeEvent.contentOffset.x / profileContentWidth,
+    );
+    setActiveProfileTab(index);
+  };
+
+  const viewingArt =
+    viewingArtIndex !== null ? modalImages[viewingArtIndex] : null;
+
+  const openArtworkViewer = (index: number) => {
+    setViewingArtIndex(index);
+  };
+
+  const closeArtworkViewer = () => {
+    setViewingArtIndex(null);
+  };
+
+  const goToPrevArt = () => {
+    setViewingArtIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+  };
+
+  const goToNextArt = () => {
+    setViewingArtIndex((prev) =>
+      prev !== null && prev < modalImages.length - 1 ? prev + 1 : prev,
+    );
   };
 
   const getCardStyle = () => {
@@ -297,7 +387,11 @@ export default function GalleryDashboardScreen() {
               style={[styles.actionButton, styles.infoButton]}
               onPress={() => openArtistProfile(artists[currentIndex])}
             >
-              <Ionicons name="information-circle-outline" size={28} color="#4d4139" />
+              <Ionicons
+                name="information-circle-outline"
+                size={28}
+                color="#4d4139"
+              />
             </Pressable>
 
             <Pressable
@@ -315,25 +409,51 @@ export default function GalleryDashboardScreen() {
         <Pressable style={styles.navIcon}>
           <Ionicons name="albums" size={26} color="#3a332c" />
         </Pressable>
-        <Pressable onPress={() => router.push("/messages")} style={styles.navIcon}>
-          <Ionicons name="chatbubble-ellipses-outline" size={26} color="#4d4139" />
+        <Pressable
+          onPress={() => router.push("/messages")}
+          style={styles.navIcon}
+        >
+          <Ionicons
+            name="chatbubble-ellipses-outline"
+            size={26}
+            color="#4d4139"
+          />
         </Pressable>
-        <Pressable onPress={() => router.push("/notifications")} style={styles.navIcon}>
+        <Pressable
+          onPress={() => router.push("/notifications")}
+          style={styles.navIcon}
+        >
           <Ionicons name="notifications-outline" size={26} color="#4d4139" />
         </Pressable>
-        <Pressable onPress={() => router.push("/calendar")} style={styles.navIcon}>
+        <Pressable
+          onPress={() => router.push("/calendar")}
+          style={styles.navIcon}
+        >
           <Ionicons name="calendar-outline" size={26} color="#4d4139" />
         </Pressable>
-        <Pressable onPress={() => router.push("/gallery_profile")} style={styles.navIcon}>
+        <Pressable
+          onPress={() => router.push("/gallery_profile")}
+          style={styles.navIcon}
+        >
           <Ionicons name="person-outline" size={26} color="#4d4139" />
         </Pressable>
       </View>
 
       {/* ARTIST PROFILE MODAL */}
-      <Modal visible={profileModal} animationType="slide" onRequestClose={() => setProfileModal(false)}>
+      <Modal
+        visible={profileModal}
+        animationType="slide"
+        onRequestClose={() => setProfileModal(false)}
+      >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Pressable style={styles.modalBackBtn} onPress={() => setProfileModal(false)}>
+            <Pressable
+              style={styles.modalBackBtn}
+              onPress={() => {
+                setProfileModal(false);
+                setViewingArtIndex(null);
+              }}
+            >
               <Ionicons name="chevron-back" size={26} color="#3a332c" />
               <Text style={styles.modalBackText}>Back</Text>
             </Pressable>
@@ -344,47 +464,228 @@ export default function GalleryDashboardScreen() {
           </View>
 
           {modalArtist && (
-            <ScrollView contentContainerStyle={styles.modalContent}>
-              <Image source={{ uri: modalArtist.profile_pic }} style={styles.modalAvatar} />
-              <Text style={styles.modalName}>{modalArtist.username}</Text>
-              {modalArtist.compatibility !== undefined && (
-                <View style={styles.modalBadge}>
-                  <Text style={styles.modalBadgeText}>{Math.round(modalArtist.compatibility)}% match</Text>
-                </View>
-              )}
-
-              <Text style={styles.modalSectionTitle}>About</Text>
-              {modalArtist.answers?.art_type ? (
-                <View style={styles.modalQA}>
-                  <Text style={styles.modalQ}>Art type</Text>
-                  <Text style={styles.modalA}>{modalArtist.answers.art_type}</Text>
-                </View>
-              ) : null}
-              {modalArtist.answers?.years_experience ? (
-                <View style={styles.modalQA}>
-                  <Text style={styles.modalQ}>Experience</Text>
-                  <Text style={styles.modalA}>{modalArtist.answers.years_experience} years</Text>
-                </View>
-              ) : null}
-
-              <Text style={styles.modalSectionTitle}>Artwork</Text>
-              {loadingImages ? (
-                <ActivityIndicator color="#4d4139" style={{ marginTop: 16 }} />
-              ) : modalImages.length === 0 ? (
-                <Text style={styles.modalA}>No artwork uploaded yet.</Text>
-              ) : (
-                <View style={styles.artworkGrid}>
-                  {modalImages.map((img) => (
-                    <View key={img.id} style={styles.artworkCell}>
-                      <Image source={{ uri: img.image_url }} style={styles.artworkThumb} resizeMode="cover" />
-                      {img.description?.title ? (
-                        <Text style={styles.artworkTitle} numberOfLines={1}>{img.description.title}</Text>
-                      ) : null}
+            <>
+              {/* PROFILE HEADER — same layout as the artist's own dashboard */}
+              <View style={styles.profileHeader}>
+                <Image
+                  source={{ uri: modalArtist.profile_pic }}
+                  style={styles.profileHeaderImage}
+                />
+                <View style={{ marginLeft: 16, flex: 1 }}>
+                  <Text style={styles.profileHeaderName} numberOfLines={1}>
+                    {modalArtist.username}
+                  </Text>
+                  <Text style={styles.profileHeaderSubtitle} numberOfLines={1}>
+                    {modalArtist.answers?.art_type || "type of art"}
+                  </Text>
+                  {modalArtist.compatibility !== undefined && (
+                    <View style={styles.profileMatchBadge}>
+                      <Text style={styles.modalBadgeText}>
+                        {Math.round(modalArtist.compatibility)}% match
+                      </Text>
                     </View>
+                  )}
+                </View>
+              </View>
+
+              <View
+                style={styles.profileScreen}
+                onLayout={(e) =>
+                  setProfileContentWidth(e.nativeEvent.layout.width)
+                }
+              >
+                {/* TAB BAR */}
+                <View style={styles.tabBar}>
+                  {PROFILE_TABS.map((tab, i) => (
+                    <Pressable
+                      key={tab}
+                      style={[
+                        styles.tabButton,
+                        activeProfileTab === i && styles.tabButtonActive,
+                      ]}
+                      onPress={() => goToProfileTab(i)}
+                    >
+                      <Text
+                        style={[
+                          styles.tabText,
+                          activeProfileTab === i && styles.tabTextActive,
+                        ]}
+                      >
+                        {tab}
+                      </Text>
+                    </Pressable>
                   ))}
                 </View>
-              )}
-            </ScrollView>
+
+                {/* SWIPEABLE CONTENT — About / Gallery / Blog updates */}
+                <ScrollView
+                  key={modalArtist.id}
+                  ref={profileScrollRef}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onMomentumScrollEnd={onProfileScrollEnd}
+                  style={{ flex: 1 }}
+                >
+                  {/* ABOUT */}
+                  <View style={[styles.page, { width: profileContentWidth }]}>
+                    <ScrollView contentContainerStyle={styles.pageContent}>
+                      {Object.entries(QUESTION_LABELS).map(([key, label]) => (
+                        <View key={key} style={styles.qaBlock}>
+                          <Text style={styles.qaQuestion}>{label}</Text>
+                          <Text style={styles.qaAnswer}>
+                            {modalArtist.answers?.[key] || "—"}
+                          </Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  {/* GALLERY — responsive Instagram-style grid, read-only */}
+                  <View style={[styles.page, { width: profileContentWidth }]}>
+                    {loadingImages ? (
+                      <ActivityIndicator
+                        color="#4d4139"
+                        style={{ marginTop: 40 }}
+                      />
+                    ) : (
+                      <FlatList
+                        data={modalImages}
+                        keyExtractor={(item) => item.id}
+                        numColumns={profileNumColumns}
+                        key={profileNumColumns}
+                        contentContainerStyle={{
+                          padding: GRID_PADDING,
+                          paddingBottom: 100,
+                        }}
+                        columnWrapperStyle={
+                          profileNumColumns > 1
+                            ? { gap: GRID_SPACING }
+                            : undefined
+                        }
+                        ItemSeparatorComponent={() => (
+                          <View style={{ height: GRID_SPACING }} />
+                        )}
+                        renderItem={({ item, index }) => (
+                          <Pressable onPress={() => openArtworkViewer(index)}>
+                            <Image
+                              source={{ uri: item.image_url }}
+                              style={{
+                                width: profileTileSize,
+                                height: profileTileSize,
+                                borderRadius: 6,
+                                backgroundColor: "#ddd",
+                              }}
+                            />
+                          </Pressable>
+                        )}
+                        ListEmptyComponent={
+                          <Text style={styles.emptyText}>
+                            No artwork uploaded yet.
+                          </Text>
+                        }
+                      />
+                    )}
+                  </View>
+
+                  {/* BLOG UPDATES */}
+                  <View style={[styles.page, { width: profileContentWidth }]}>
+                    <FlatList
+                      data={modalBlogPosts}
+                      keyExtractor={(item) => item.id}
+                      contentContainerStyle={styles.pageContent}
+                      renderItem={({ item }) => (
+                        <View style={styles.blogCard}>
+                          <Text style={styles.blogText}>{item.content}</Text>
+                          <Text style={styles.blogDate}>
+                            {new Date(item.created_at).toLocaleDateString()}
+                          </Text>
+                        </View>
+                      )}
+                      ListEmptyComponent={
+                        <Text style={styles.emptyText}>No updates yet.</Text>
+                      }
+                    />
+                  </View>
+                </ScrollView>
+              </View>
+            </>
+          )}
+
+          {/* ARTWORK POST VIEW — slides over the profile, Facebook-post style */}
+          {viewingArt && (
+            <View style={styles.artOverlay}>
+              <View style={styles.modalHeader}>
+                <Pressable
+                  style={styles.modalBackBtn}
+                  onPress={closeArtworkViewer}
+                >
+                  <Ionicons name="chevron-back" size={26} color="#3a332c" />
+                  <Text style={styles.modalBackText}>Back</Text>
+                </Pressable>
+                <Text style={styles.modalHeaderTitle} numberOfLines={1}>
+                  {viewingArt.description?.title || "Untitled"}
+                </Text>
+                <View style={{ width: 70 }} />
+              </View>
+
+              <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+                <View style={styles.artPostImageWrapper}>
+                  {viewingArtIndex! > 0 && (
+                    <Pressable
+                      style={[styles.artNavArrow, styles.artNavArrowLeft]}
+                      onPress={goToPrevArt}
+                    >
+                      <Ionicons name="chevron-back" size={24} color="white" />
+                    </Pressable>
+                  )}
+
+                  <Image
+                    source={{ uri: viewingArt.image_url }}
+                    style={styles.artPostImage}
+                    resizeMode="cover"
+                  />
+
+                  {viewingArtIndex! < modalImages.length - 1 && (
+                    <Pressable
+                      style={[styles.artNavArrow, styles.artNavArrowRight]}
+                      onPress={goToNextArt}
+                    >
+                      <Ionicons
+                        name="chevron-forward"
+                        size={24}
+                        color="white"
+                      />
+                    </Pressable>
+                  )}
+                </View>
+
+                <View style={styles.artPostBody}>
+                  <Text style={styles.artViewTitle}>
+                    {viewingArt.description?.title || "Untitled"}
+                  </Text>
+                  {!!viewingArt.description?.medium && (
+                    <Text style={styles.artViewMeta}>
+                      Medium: {viewingArt.description.medium}
+                    </Text>
+                  )}
+                  {!!viewingArt.description?.size && (
+                    <Text style={styles.artViewMeta}>
+                      Size: {viewingArt.description.size}
+                    </Text>
+                  )}
+                  {!!viewingArt.description?.description ? (
+                    <Text style={styles.artViewDescription}>
+                      {viewingArt.description.description}
+                    </Text>
+                  ) : (
+                    <Text style={styles.artViewDescription}>
+                      No description provided.
+                    </Text>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
           )}
         </View>
       </Modal>
@@ -629,90 +930,199 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  modalContent: {
-    paddingTop: 24,
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-    alignItems: "center",
-  },
-
-  modalAvatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#ddd",
-    marginBottom: 12,
-  },
-
-  modalName: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#3a332c",
-    marginBottom: 8,
-  },
-
-  modalBadge: {
-    backgroundColor: "#3a332c",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-    marginBottom: 20,
-  },
-
   modalBadgeText: {
     color: "white",
     fontWeight: "700",
     fontSize: 14,
   },
 
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#3a332c",
-    alignSelf: "flex-start",
-    marginTop: 16,
-    marginBottom: 10,
-  },
-
-  modalQA: {
-    alignSelf: "stretch",
-    marginBottom: 10,
-  },
-
-  modalQ: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#3a332c",
-  },
-
-  modalA: {
-    fontSize: 15,
-    color: "#6b6258",
-    marginTop: 2,
-  },
-
-  artworkGrid: {
+  profileHeader: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    alignSelf: "stretch",
-    marginTop: 4,
+    alignItems: "center",
+    paddingTop: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
 
-  artworkCell: {
-    width: "47%",
-  },
-
-  artworkThumb: {
-    width: "100%",
-    aspectRatio: 1,
-    borderRadius: 10,
+  profileHeaderImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: "#ddd",
   },
 
-  artworkTitle: {
-    fontSize: 12,
+  profileHeaderName: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#3a332c",
+  },
+
+  profileHeaderSubtitle: {
+    fontSize: 14,
     color: "#6b6258",
     marginTop: 4,
+  },
+
+  profileMatchBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#3a332c",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+
+  profileScreen: {
+    flex: 1,
+    width: "96%",
+    borderRadius: 45,
+    marginBottom: 10,
+    backgroundColor: "#f5f0e6",
+    alignSelf: "center",
+  },
+
+  tabBar: {
+    flexDirection: "row",
+    marginHorizontal: 24,
+    backgroundColor: "#7c6f63",
+    borderRadius: 24,
+    padding: 4,
+    marginTop: 10,
+  },
+
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 20,
+    alignItems: "center",
+  },
+
+  tabButtonActive: {
+    backgroundColor: "#f5f0e6",
+  },
+
+  tabText: {
+    color: "#f5f0e6",
+    fontWeight: "600",
+    fontSize: 13,
+  },
+
+  tabTextActive: {
+    color: "#3a332c",
+  },
+
+  page: {
+    flex: 1,
+  },
+
+  pageContent: {
+    padding: 24,
+    paddingBottom: 100,
+  },
+
+  qaBlock: {
+    marginBottom: 20,
+  },
+
+  qaQuestion: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#3a332c",
+    marginBottom: 4,
+  },
+
+  qaAnswer: {
+    fontSize: 15,
+    color: "#6b6258",
+  },
+
+  blogCard: {
+    backgroundColor: "white",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+  },
+
+  blogText: {
+    fontSize: 15,
+    color: "#3a332c",
+  },
+
+  blogDate: {
+    fontSize: 12,
+    color: "#a09989",
+    marginTop: 8,
+  },
+
+  emptyText: {
+    textAlign: "center",
+    color: "#a09989",
+    marginTop: 40,
+  },
+
+  artOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#f5f0e6",
+    zIndex: 20,
+    elevation: 20,
+  },
+
+  artPostImageWrapper: {
+    position: "relative",
+  },
+
+  artPostImage: {
+    width: "100%",
+    height: SCREEN_WIDTH,
+    backgroundColor: "#ddd",
+  },
+
+  artPostBody: {
+    padding: 20,
+  },
+
+  artNavArrow: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -18,
+    width: 33,
+    height: 33,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+
+  artNavArrowLeft: {
+    left: 12,
+  },
+
+  artNavArrowRight: {
+    right: 12,
+  },
+
+  artViewTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#3a332c",
+    marginBottom: 6,
+  },
+
+  artViewMeta: {
+    fontSize: 13,
+    color: "#6b6258",
+    marginBottom: 2,
+  },
+
+  artViewDescription: {
+    fontSize: 14,
+    color: "#3a332c",
+    marginTop: 10,
+    lineHeight: 20,
   },
 });
